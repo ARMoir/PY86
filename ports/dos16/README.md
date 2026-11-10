@@ -1,7 +1,8 @@
-# Experimental 16-bit DOS port (TandyPy)
+# Py86: Python 3 for 16-bit DOS
 
-This directory preserves the **MicroPython 1.24.1** Python 3 interpreter port built for
-16-bit MS-DOS on an Intel 8086-class CPU, including the NEC V20 in a Tandy 1000 EX.
+**Py86** is an experimental Python 3 interpreter for 16-bit MS-DOS, based on
+**MicroPython 1.24.1**. It targets Intel 8086/8088-class CPUs and compatibles,
+including NEC V20 machines such as the Tandy 1000 EX.
 It was developed and tested separately from the current `master` branch.
 
 **Status:** experimental, 16-bit Open Watcom build. A DOSBox 8086-mode run in the
@@ -44,9 +45,9 @@ python build.py --source C:\src\micropython-v1.24.1 --watcom C:\watcom
 python run_dos.py --dosbox 'C:\Program Files (x86)\DOSBox-0.74-3\DOSBox.exe'
 ```
 
-The output is `build/tandypy.exe`. Copy that executable and your `.PY` files to
-the DOS/CF drive. Start with `TANDYPY` for `>>>`, `TANDYPY SCRIPT.PY` for a
-file, or `TANDYPY -c "print(1+2)"` for a one-line program.
+The output is `build/py86.exe` (`PY86.EXE` on DOS). Copy it and your `.PY`
+files to the DOS/CF drive. Start with `PY86` for the interactive `>>>` prompt,
+`PY86 SCRIPT.PY` for a file, or `PY86 -c "print(1+2)"` for a one-line program.
 
 To exit the console under DOS, use Ctrl-Z followed by Enter. End a multi-line
 REPL block with a blank line. The source file path is resolved using DOS
@@ -72,9 +73,13 @@ memory consumption on real 7 MHz V20 hardware are not yet characterized.
 
 ## Reproducibility and test evidence
 
-The uploaded DOS executable was an MS-DOS MZ binary, 301,928 bytes, SHA-256:
+The original pre-rename `TANDYPY.EXE` in the uploaded development archive
+was an MS-DOS MZ binary, 301,928 bytes, SHA-256:
 
 `1f3cc49a94ecab5790b245b4af1c0739d0e50c8e3ae87bc0a14f22fc155b6e7b`
+
+The historical SHA-256 above identifies the original executable, **not** a
+newly compiled `PY86.EXE`. Rebuild with `build.py` to produce the renamed program.
 
 Its archived DOSBox batch run indicated `PASS` and all `CORE.PY` feature labels
 were present. That report is historical evidence, not a current CI result. The

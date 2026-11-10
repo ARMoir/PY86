@@ -50,7 +50,7 @@ typedef long mp_off_t;
 #define MP_ALWAYSINLINE
 #define MP_LIKELY(x) (x)
 #define MP_UNLIKELY(x) (x)
-#define MICROPY_HW_BOARD_NAME "Tandy DOS experimental"
+#define MICROPY_HW_BOARD_NAME "Py86 16-bit DOS"
 #define MICROPY_HW_MCU_NAME "8086/V20"
 #define MICROPY_MPHALPORT_H "mphalport.h"
 #define MP_STATE_PORT MP_STATE_VM

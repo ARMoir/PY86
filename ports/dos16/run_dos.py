@@ -14,7 +14,7 @@ stage.mkdir(exist_ok=True)
 for f in (root / 'tests').iterdir():
     if f.is_file():
         shutil.copy2(f, stage / f.name)
-shutil.copy2(root / 'build/tandypy.exe', stage / 'TANDYPY.EXE')
+shutil.copy2(root / 'build/py86.exe', stage / 'PY86.EXE')
 for f in stage.glob('*.OUT'):
     f.unlink()
 (stage / 'RESULT.TXT').unlink(missing_ok=True)
@@ -35,7 +35,7 @@ required = {'SMOKE.OUT': ['PASS smoke'], 'METHOD.OUT': ['PASS methods'],
                          'PASS exceptions', 'PASS containers', 'PASS classes_generators',
                          'PASS imports', 'PASS core_complete'],
             'GC.OUT': ['PASS gc_roots'], 'INPUT.OUT': ['PASS input'],
-            'REPL.OUT': ['>>> 3', '42', 'PASS repl_recovery', 'ValueError: repl recovery'],
+            'REPL.OUT': ['Py86 0.1', '>>> 3', '42', 'PASS repl_recovery', 'ValueError: repl recovery'],
             'ERROR.OUT': ['ValueError: intentional exit-code test']}
 missing = [f + ': ' + token for f, tokens in required.items() for token in tokens
            if token not in logs.get(f, '')]

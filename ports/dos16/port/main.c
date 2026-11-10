@@ -1,4 +1,4 @@
-/* TandyPy DOS host, MIT license. Experimental MicroPython port. */
+/* Py86 DOS host, MIT license. Experimental MicroPython port. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -115,7 +115,8 @@ int main(int argc, char **argv) {
             result = execute(argv[2], 0, MP_PARSE_FILE_INPUT);
         else result = execute(argv[1], 1, MP_PARSE_FILE_INPUT);
     } else {
-        puts("TandyPy / MicroPython 1.24.1 experimental DOS port");
+        puts("Py86 0.1 (experimental) - Python 3 for 16-bit DOS");
+        puts("Based on MicroPython 1.24.1");
         puts("Blank line ends a block; Ctrl-Z then Enter exits.");
         for (;;) {
             source[0] = 0;

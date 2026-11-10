@@ -91,11 +91,11 @@ for c in sources:
 if failures:
     raise SystemExit('Failed: ' + ','.join(failures))
 
-link = ['system dos', 'option quiet', 'option stack=16384', 'option map=tandypy.map',
-        'name tandypy.exe', *['file ' + x.name for x in objects]]
+link = ['system dos', 'option quiet', 'option stack=16384', 'option map=py86.map',
+        'name py86.exe', *['file ' + x.name for x in objects]]
 (build / 'link.lnk').write_text('\n'.join(link) + '\n')
 print(run(['wlink', '@link.lnk'], build / 'link.log'))
-print('Built', build / 'tandypy.exe')
+print('Built', build / 'py86.exe')
 
 
 

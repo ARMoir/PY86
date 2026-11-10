@@ -1,17 +1,17 @@
 @echo off
-tandypy SMOKE.PY > SMOKE.OUT
+py86 SMOKE.PY > SMOKE.OUT
 if errorlevel 1 goto fail
-tandypy METHOD.PY > METHOD.OUT
+py86 METHOD.PY > METHOD.OUT
 if errorlevel 1 goto fail
-tandypy CORE.PY > CORE.OUT
+py86 CORE.PY > CORE.OUT
 if errorlevel 1 goto fail
-tandypy GC.PY > GC.OUT
+py86 GC.PY > GC.OUT
 if errorlevel 1 goto fail
-tandypy INPUT.PY < INPUT.IN > INPUT.OUT
+py86 INPUT.PY < INPUT.IN > INPUT.OUT
 if errorlevel 1 goto fail
-tandypy < REPL.IN > REPL.OUT
+py86 < REPL.IN > REPL.OUT
 if errorlevel 1 goto fail
-tandypy ERROR.PY > ERROR.OUT
+py86 ERROR.PY > ERROR.OUT
 if not errorlevel 1 goto fail
 echo PASS > RESULT.TXT
 goto end
