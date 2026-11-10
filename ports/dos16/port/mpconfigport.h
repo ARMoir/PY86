@@ -1,0 +1,56 @@
+#include <stdint.h>
+#include <stdlib.h>
+#include <limits.h>
+#define MICROPY_CONFIG_ROM_LEVEL (MICROPY_CONFIG_ROM_LEVEL_CORE_FEATURES)
+#define MICROPY_OBJ_REPR (MICROPY_OBJ_REPR_B)
+#define MICROPY_ENABLE_COMPILER (1)
+#define MICROPY_ENABLE_GC (1)
+#define MICROPY_GC_STACK_ENTRY_TYPE unsigned short
+#define MICROPY_NLR_SETJMP (1)
+#define MICROPY_NO_ALLOCA (1)
+#define MICROPY_HELPER_REPL (1)
+#define MICROPY_ENABLE_EXTERNAL_IMPORT (1)
+#define MICROPY_READER_POSIX (0)
+#define MICROPY_READER_VFS (0)
+#define MICROPY_ENABLE_SOURCE_LINE (1)
+#define MICROPY_ERROR_REPORTING (MICROPY_ERROR_REPORTING_NORMAL)
+#define MICROPY_ROM_TEXT_COMPRESSION (0)
+#define MICROPY_LONGINT_IMPL (MICROPY_LONGINT_IMPL_MPZ)
+#define MPZ_DIG_SIZE (8)
+#define MICROPY_FLOAT_IMPL (MICROPY_FLOAT_IMPL_DOUBLE)
+#define MICROPY_PY_BUILTINS_COMPLEX (1)
+#define MICROPY_PY_BUILTINS_STR_UNICODE (1)
+#define MICROPY_PY_BUILTINS_INPUT (1)
+#define MICROPY_PY_BUILTINS_HELP (0)
+#define MICROPY_PY_SYS (1)
+#define MICROPY_PY_SYS_PATH (1)
+#define MICROPY_PY_SYS_ARGV (1)
+#define MICROPY_PY_SYS_EXIT (1)
+#define MICROPY_PY_GC (1)
+#define MICROPY_PY_IO (0)
+#define MICROPY_CPYTHON_COMPAT (1)
+#define MICROPY_PY___FILE__ (1)
+#define MICROPY_PY_MATH (0)
+#define MICROPY_ALLOC_PATH_MAX (128)
+#define MICROPY_ALLOC_PARSE_CHUNK_INIT (16)
+#define MICROPY_STACK_CHECK (1)
+#define MICROPY_USE_INTERNAL_ERRNO (1)
+#define MICROPY_QSTR_BYTES_IN_HASH (1)
+#define MICROPY_QSTR_BYTES_IN_LEN (1)
+#define MP_ENDIANNESS_LITTLE (1)
+#define MP_SSIZE_MAX (32767)
+#define UINT_FMT "%lu"
+#define INT_FMT "%ld"
+typedef long mp_int_t;
+typedef unsigned long mp_uint_t;
+typedef long mp_off_t;
+#define NORETURN __declspec(noreturn)
+#define MP_WEAK
+#define MP_NOINLINE
+#define MP_ALWAYSINLINE
+#define MP_LIKELY(x) (x)
+#define MP_UNLIKELY(x) (x)
+#define MICROPY_HW_BOARD_NAME "Tandy DOS experimental"
+#define MICROPY_HW_MCU_NAME "8086/V20"
+#define MICROPY_MPHALPORT_H "mphalport.h"
+#define MP_STATE_PORT MP_STATE_VM

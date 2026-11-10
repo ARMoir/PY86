@@ -1,0 +1,8 @@
+build/
+dos-test/
+__pycache__/
+*.pyc
+*.obj
+*.exe
+*.OUT
+RESULT.TXT

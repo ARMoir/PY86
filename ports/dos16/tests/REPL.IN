@@ -1,0 +1,8 @@
+1 + 2
+x = 40
+def add(n):
+    return x + n
+
+add(2)
+raise ValueError('repl recovery')
+print('PASS repl_recovery')
