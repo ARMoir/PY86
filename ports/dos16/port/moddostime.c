@@ -13,6 +13,30 @@
 
 #define PY86_TICKS_PER_DAY 1573040UL
 
+/* Opt-in interactive text refresh. Normal os.system("cls") still clears. */
+static int py86_home_on_cls = 0;
+void py86_set_home_cls(int enabled) {
+    py86_home_on_cls = enabled;
+}
+
+/* Reposition the active text page cursor without erasing existing content. */
+static void py86_cursor_home(void) {
+    union REGS in_regs;
+    union REGS out_regs;
+    unsigned char page;
+    fflush(stdout);
+    memset(&in_regs, 0, sizeof(in_regs));
+    in_regs.h.ah = 0x0f;
+    int86(0x10, &in_regs, &out_regs);
+    page = out_regs.h.bh;
+    memset(&in_regs, 0, sizeof(in_regs));
+    in_regs.h.ah = 0x02;
+    in_regs.h.bh = page;
+    in_regs.h.dh = 0;
+    in_regs.h.dl = 0;
+    int86(0x10, &in_regs, &out_regs);
+}
+
 /* BIOS tick count since midnight (INT 1Ah, AH=00h). */
 static unsigned long py86_bios_ticks(void) {
     union REGS in_regs;
@@ -71,7 +95,11 @@ static mp_obj_t py86_os_system(mp_obj_t command_in) {
     if (end - p == 3 && tolower((unsigned char)p[0]) == 'c'
         && tolower((unsigned char)p[1]) == 'l'
         && tolower((unsigned char)p[2]) == 's') {
-        py86_clear_screen();
+        if (py86_home_on_cls) {
+            py86_cursor_home();
+        } else {
+            py86_clear_screen();
+        }
         return MP_OBJ_NEW_SMALL_INT(0);
     }
     /* For other commands preserve os.system semantics if COMMAND.COM fits RAM. */

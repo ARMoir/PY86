@@ -29,8 +29,11 @@ README = (
     "\r\n"
     "Copy all files to the same directory on your DOS drive.\r\n"
     "Run: RUNCLK\r\n"
-    "Or:  PY86 CLOCK.PY\r\n"
+    "Or:  PY86 --home-cls CLOCK.PY\r\n"
     "Start the interactive prompt with: PY86\r\n"
+    "Normal PY86 CLOCK.PY still uses ordinary screen clearing.\r\n"
+    "The --home-cls mode leaves the previous clock visible while\r\n"
+    "Python prepares the next frame, then overwrites it.\r\n"
     "\r\n"
     "Requires a PC-compatible DOS computer with enough conventional RAM.\r\n"
     "For the clock, set the system date/time correctly in DOS.\r\n"
@@ -39,7 +42,7 @@ README = (
     "Experimental interpreter, based on MicroPython 1.24.1.\r\n"
     "Not a complete implementation of CPython 3.x.\r\n"
 )
-RUNCLK = "@echo off\r\nPY86 CLOCK.PY\r\n"
+RUNCLK = "@echo off\r\nPY86 --home-cls CLOCK.PY\r\n"
 
 def main():
     missing = [str(src) for src in INPUTS.values() if not src.is_file()]

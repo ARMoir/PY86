@@ -13,6 +13,9 @@
 #include "py/objlist.h"
 #include "py/builtin.h"
 
+/* From moddostime.c: opt-in cursor-home behavior for interactive redraws. */
+extern void py86_set_home_cls(int enabled);
+
 static char *stack_top;
 static void *heap;
 
@@ -96,6 +99,7 @@ static int execute(const char *source, int file, mp_parse_input_kind_t kind) {
 int main(int argc, char **argv) {
     int dummy;
     int result = 0;
+    int first_arg = 1;
     char line[256];
     static char source[2048];
     setvbuf(stdout, NULL, _IONBF, 0);
@@ -107,13 +111,19 @@ int main(int argc, char **argv) {
     if (!heap) { fputs("Cannot allocate 48000-byte Python heap\n", stderr); return 2; }
     gc_init(heap, (char *)heap + 48000U);
     mp_init();
+    /* Keep ordinary cls behavior by default. --home-cls is useful for
+       fixed-width full-frame text apps such as the unchanged PythonClock. */
+    if (argc > 1 && strcmp(argv[1], "--home-cls") == 0) {
+        first_arg = 2;
+        py86_set_home_cls(1);
+    }
     mp_obj_list_append(mp_sys_path, MP_OBJ_NEW_QSTR(MP_QSTR_));
-    for (dummy = 1; dummy < argc; ++dummy)
+    for (dummy = first_arg; dummy < argc; ++dummy)
         mp_obj_list_append(mp_sys_argv, mp_obj_new_str(argv[dummy], strlen(argv[dummy])));
-    if (argc > 1) {
-        if (argc == 3 && strcmp(argv[1], "-c") == 0)
-            result = execute(argv[2], 0, MP_PARSE_FILE_INPUT);
-        else result = execute(argv[1], 1, MP_PARSE_FILE_INPUT);
+    if (argc > first_arg) {
+        if (argc == first_arg + 2 && strcmp(argv[first_arg], "-c") == 0)
+            result = execute(argv[first_arg + 1], 0, MP_PARSE_FILE_INPUT);
+        else result = execute(argv[first_arg], 1, MP_PARSE_FILE_INPUT);
     } else {
         puts("Py86 0.1 (experimental) - Python 3 for 16-bit DOS");
         puts("Based on MicroPython 1.24.1");

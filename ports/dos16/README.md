@@ -148,3 +148,21 @@ Extract these files into one folder on the DOS/CF drive, then run `RUNCLK`
 (no release publishing, deployment, or automatic firmware/CF image writing).
 It does not run the DOSBox test suite; the ZIP is a reproducible build
 deliverable, not proof that the clock works on every DOS system.
+
+
+## Flicker-free clock redraw on slow DOS hardware
+
+The original PythonClock invokes `os.system("cls")` after displaying each
+frame. On a 7 MHz 8086/V20-class machine, recomputing the next frame can
+take multiple seconds, leaving the screen blank after an ordinary clear.
+
+Use **`RUNCLK.BAT`**, which starts `PY86 --home-cls CLOCK.PY`. In this
+opt-in mode, `os.system("cls")` homes the BIOS text cursor to row 0, column 0
+**without clearing the previous clock**. The next full-sized frame overwrites
+the old one; the five original PythonClock source files remain unchanged.
+This improves perceived redraw smoothness but not Python execution speed.
+
+Plain `PY86 CLOCK.PY` retains normal `cls` clearing behavior, so other programs
+aren't affected. Cursor-home mode is intended for fixed-size full-screen text
+programs; differing line lengths or stray output may leave old characters.
+The mode assumes a DOS BIOS-compatible text console.
