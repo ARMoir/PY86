@@ -11,6 +11,10 @@ py86 INPUT.PY < INPUT.IN > INPUT.OUT
 if errorlevel 1 goto fail
 py86 < REPL.IN > REPL.OUT
 if errorlevel 1 goto fail
+py86 CLOCKAPI.PY > CLOCKAPI.OUT
+if errorlevel 1 goto fail
+py86 CLKTEST.PY > CLOCK.OUT
+if errorlevel 1 goto fail
 py86 ERROR.PY > ERROR.OUT
 if not errorlevel 1 goto fail
 echo PASS > RESULT.TXT

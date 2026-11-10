@@ -23,12 +23,14 @@ build = ROOT / 'build'
 gen = build / 'genhdr'
 gen.mkdir(parents=True, exist_ok=True)
 env = dict(os.environ, WATCOM=str(wat), INCLUDE=str(wat / 'h'))
-env['PATH'] = str(wat / 'binnt64') + os.pathsep + env['PATH']
+toolbin = wat / ('binnt64' if os.name == 'nt' else 'binl64')
+exesuffix = '.exe' if os.name == 'nt' else ''
+env['PATH'] = str(toolbin) + os.pathsep + env['PATH']
 flags = ['-q', '-bt=dos', '-0', '-ml', '-za99', '-ot', '-s', '-fpc', '-zp2',
          '-i=' + str(ROOT / 'port'), '-i=' + str(src), '-i=' + str(build)]
 
 def run(cmd, output=None):
-    cmd[0] = str(wat / 'binnt64' / (cmd[0] + '.exe')) if cmd[0] in ('wcc', 'wlink') else cmd[0]
+    cmd[0] = str(toolbin / (cmd[0] + exesuffix)) if cmd[0] in ('wcc', 'wlink') else cmd[0]
     r = subprocess.run([str(x) for x in cmd], cwd=build, env=env, stdout=subprocess.PIPE,
                        stderr=subprocess.STDOUT)
     text = r.stdout.decode('utf-8', 'replace').replace('\r\n', '\n')
@@ -45,7 +47,8 @@ def pytool(name, inputs, output):
 mk = (src / 'py/py.mk').read_text()
 core = mk.split('PY_CORE_O_BASENAME = $(addprefix py/,', 1)[1].split(')', 1)[0]
 sources = [src / 'py' / (x + '.c') for x in re.findall(r'(\w+)\.o', core)]
-sources += [ROOT / 'port/main.c', src / 'shared/readline/readline.c']
+sources += [ROOT / 'port/main.c', ROOT / 'port/moddostime.c',
+            src / 'shared/readline/readline.c']
 
 if not args.only and not args.resume:
     # Dependency bootstrap: preprocessing does not require C declarations to resolve.
@@ -99,3 +102,7 @@ print('Built', build / 'py86.exe')
 
 
 
+
+# The lightweight datetime shim is a Python source module, not part of the EXE.
+shutil.copy2(ROOT / 'stdlib/datetime.py', build / 'datetime.py')
+print('Staged', build / 'datetime.py')

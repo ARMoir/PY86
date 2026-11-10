@@ -90,3 +90,35 @@ The 2026-11-10 upload also contained an experimental `patch_source.py` one-off
 mutation helper. This directory deliberately uses **one version-specific Git
 patch** instead so that the final source state, including later manual fixes,
 can be reconstructed exactly and reviewed.
+
+## PythonClock integration (unchanged application)
+
+The five original source files from
+[ARMoir/PythonClock](https://github.com/ARMoir/PythonClock), pinned to
+commit `3f1a7040e1e374238f59d9da3087679368c2cb70`, are stored unchanged
+under `tests/pythonclock/`. The DOSBox runner stages them along with Py86's
+`datetime.py` shim and generates a two-tick `CLKTEST.PY` from the original
+`Clock.py` by changing only its loop bound in the disposable DOSBox staging
+folder, leaving the checked-in application source unmodified.
+
+Native support is provided by a small, registered DOS-backed `os` module
+(`os.name == "dos"`, `os.system("cls")` via BIOS video; other commands use
+COMMAND.COM through the C runtime) and `time` module (`sleep()` via BIOS timer
+and `localtime()` via DOS date/time). `stdlib/datetime.py` supplies the subset
+needed for `datetime.datetime.now()` and basic date/time fields. It is **not**
+CPython's full `datetime` module; no timezone, date arithmetic, or `timedelta`
+are implemented. `time.localtime()` takes no positional argument, and sleep
+is quantized to BIOS ticks (about 55 ms) with a one-hour call limit.
+
+For the unchanged clock, copy `PY86.EXE`, `datetime.py` from `build/`, and
+`Clock.py`, `face.py`, `hour.py`, `minute.py`, and `second.py` from PythonClock
+into the same DOS working directory, then run:
+
+```
+C:\>PY86 CLOCK.PY
+```
+
+**Verification:** a fresh Open Watcom build and DOSBox integration run must
+pass before calling this a working real-hardware release. Text-mode BIOS screen
+clearing may behave differently in graphics modes; the intended target is a
+standard DOS text console. The clock's drawing routines are unchanged.
