@@ -5,10 +5,11 @@
 including NEC V20 machines such as the Tandy 1000 EX.
 It was developed and tested separately from the current `master` branch.
 
-**Status:** experimental, 16-bit Open Watcom build. A DOSBox 8086-mode run in the
-provided November 10, 2026 development archive reported `PASS` for its bundled
-smoke, core-language, memory-management, input, and REPL tests. **No physical
-Tandy 1000 EX test or independent rebuild is claimed here.**
+**Status:** experimental 16-bit Open Watcom build. GitHub Actions now
+rebuilds and packages Py86 successfully. The original PythonClock has run on
+physical Tandy 1000 EX hardware, but the newly expanded modules have not yet
+been tested there. Older archived DOSBox tests reported `PASS`; these were
+not a fresh emulator test of the expanded module build.
 
 ## Versioning and source changes
 
@@ -118,8 +119,9 @@ into the same DOS working directory, then run:
 C:\>PY86 CLOCK.PY
 ```
 
-**Verification:** a fresh Open Watcom build and DOSBox integration run must
-pass before calling this a working real-hardware release. Text-mode BIOS screen
+**Verification:** the current Py86 interpreter builds in GitHub Actions and
+PythonClock has been observed on real Tandy hardware. A new DOSBox integration
+run and real-hardware checks of the expanded standard library remain outstanding. Text-mode BIOS screen
 clearing may behave differently in graphics modes; the intended target is a
 standard DOS text console. The clock's drawing routines are unchanged.
 
@@ -170,37 +172,37 @@ The mode assumes a DOS BIOS-compatible text console.
 
 ## Expanded standard-library imports (16-bit DOS)
 
-The DOS build enables MicroPython 1.24.1's C-backed **\`math\`** and
-**\`random\`** modules and extends Py86's DOS-backed **\`os\`** and **\`time\`**
+The DOS build enables MicroPython 1.24.1's C-backed **`math`** and
+**`random`** modules and extends Py86's DOS-backed **`os`** and **`time`**
 modules. The goal is usable Python 3 APIs without needing newer x86 hardware.
 
 | Import | Available APIs in this port |
 | --- | --- |
-| \`math\` | Core math functions such as \`sqrt\`, \`sin\`, \`cos\`, \`tan\`, \`log\`, \`exp\`, \`floor\`, \`ceil\`, \`isclose\`, \`factorial\`, plus \`pi\` and \`e\` |
-| \`random\` | Upstream MicroPython native generator: \`seed\`, \`getrandbits\`, \`random\`, \`randrange\`, \`randint\`, \`choice\`, \`uniform\` |
-| \`os\` | \`name='dos'\`, \`sep\`, \`system\`, \`getcwd\`, \`chdir\`, \`listdir\`, \`mkdir\`, \`rmdir\`, \`rename\`, \`remove\`, \`unlink\`, \`stat\`, \`getenv\` |
-| \`time\` | \`sleep\`, \`sleep_ms\`, \`time\`, \`localtime\` (current time or supplied timestamp), \`ticks_ms\`, \`ticks_diff\` |
+| `math` | Core math functions such as `sqrt`, `sin`, `cos`, `tan`, `log`, `exp`, `floor`, `ceil`, `isclose`, `factorial`, plus `pi` and `e` |
+| `random` | Upstream MicroPython native generator: `seed`, `getrandbits`, `random`, `randrange`, `randint`, `choice`, `uniform` |
+| `os` | `name='dos'`, `sep`, `system`, `getcwd`, `chdir`, `listdir`, `mkdir`, `rmdir`, `rename`, `remove`, `unlink`, `stat`, `getenv` |
+| `time` | `sleep`, `sleep_ms`, `time`, `localtime` (current time or supplied timestamp), `ticks_ms`, `ticks_diff` |
 
 ### Known limitations
 
-- \`math.tau\`, \`math.inf\`, \`math.nan\` are disabled because Open Watcom C16
+- `math.tau`, `math.inf`, `math.nan` are disabled because Open Watcom C16
   does not support their required compile-time constant expressions.
-- \`random\` uses a **non-cryptographic** pseudo-random number generator. It is
-  not the full CPython \`random\` API (\`shuffle\`, \`sample\`, distributions, etc.).
+- `random` uses a **non-cryptographic** pseudo-random number generator. It is
+  not the full CPython `random` API (`shuffle`, `sample`, distributions, etc.).
   Seed it explicitly for repeatable results.
 - DOS filesystem names are limited by the native DOS/Watcom interfaces
-  (normally 8.3 under DOS 6.22); \`os.path\` is not implemented.
-  \`os.stat\` returns a 10-element stat tuple, but POSIX metadata fields are
+  (normally 8.3 under DOS 6.22); `os.path` is not implemented.
+  `os.stat` returns a 10-element stat tuple, but POSIX metadata fields are
   not necessarily meaningful on DOS.
-- \`time\` uses the DOS wall clock and BIOS ticks, which have approximately
-  **55 ms** resolution. \`ticks_ms\` wraps each DOS day, and \`ticks_diff\`
+- `time` uses the DOS wall clock and BIOS ticks, which have approximately
+  **55 ms** resolution. `ticks_ms` wraps each DOS day, and `ticks_diff`
   handles that wrap for sufficiently short intervals. Date/time timezone
   conversion depends on the DOS C runtime, not a zone-information database.
-  Dates after the 32-bit \`time_t\` limit may not work.
+  Dates after the 32-bit `time_t` limit may not work.
 - This is not the complete CPython standard library. The existing 48 KB
   Python heap and 16-bit real-mode memory restrictions still apply.
 
-The new \`tests/LIBTEST.PY\` exercises representative functionality from all
+The new `tests/LIBTEST.PY` exercises representative functionality from all
 four modules, including DOS directory/file operations, seeded random sequences,
 mathematical functions, and BIOS-tick sleeps. The DOSBox test runner includes
 it, but the automatic GitHub Actions workflow remains **build/package only**.
