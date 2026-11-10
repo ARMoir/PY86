@@ -122,3 +122,29 @@ C:\>PY86 CLOCK.PY
 pass before calling this a working real-hardware release. Text-mode BIOS screen
 clearing may behave differently in graphics modes; the intended target is a
 standard DOS text console. The clock's drawing routines are unchanged.
+
+
+## GitHub Actions: ready-to-run PythonClock package
+
+Every push to `tandypy-dos16-port` (and `master` after this port merges) runs
+[the Py86 package workflow](../../.github/workflows/py86-package.yml).
+It checks out the pinned MicroPython v1.24.1 core, downloads the pinned
+**2026-11-01 Open Watcom Linux x64 snapshot**, applies the DOS compatibility
+patch, rebuilds `PY86.EXE`, and packages the unchanged clock files.
+
+In the **Actions** tab, open the latest **Py86 DOS + PythonClock package** run
+and download the **PY86** artifact. GitHub downloads it as **PY86.zip**.
+The ZIP has everything at its root (no extra directory or nested ZIP):
+
+- `PY86.EXE` (newly compiled 16-bit DOS interpreter)
+- `datetime.py` (DOS date/time compatibility shim)
+- `Clock.py`, `face.py`, `hour.py`, `minute.py`, `second.py` (original,
+  unchanged PythonClock files)
+- `RUNCLK.BAT` (launches the unchanged clock)
+- `README.TXT` (DOS startup instructions)
+
+Extract these files into one folder on the DOS/CF drive, then run `RUNCLK`
+(or `PY86 CLOCK.PY`). The Actions workflow produces a package **artifact only**
+(no release publishing, deployment, or automatic firmware/CF image writing).
+It does not run the DOSBox test suite; the ZIP is a reproducible build
+deliverable, not proof that the clock works on every DOS system.

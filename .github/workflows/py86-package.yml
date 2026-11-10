@@ -1,0 +1,73 @@
+name: Py86 DOS + PythonClock package
+
+on:
+  push:
+    branches:
+      - tandypy-dos16-port
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Build PY86.EXE and package PythonClock
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python on the build runner
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Get pinned MicroPython 1.24.1 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet --depth 1 --branch v1.24.1 \
+            https://github.com/micropython/micropython.git "$RUNNER_TEMP/micropython-1.24.1"
+          actual="$(git -C "$RUNNER_TEMP/micropython-1.24.1" rev-parse HEAD)"
+          test "$actual" = "ecfdd5d6f9be971852003c2049600dc7b3e2a838"
+
+      - name: Install pinned Open Watcom snapshot (Linux x64)
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-delay 5 \
+            'https://github.com/open-watcom/open-watcom-v2/releases/download/2026-11-01-Build/ow-snapshot.tar.xz' \
+            --output "$RUNNER_TEMP/ow-snapshot.tar.xz"
+          mkdir -p "$RUNNER_TEMP/watcom"
+          tar -xJf "$RUNNER_TEMP/ow-snapshot.tar.xz" -C "$RUNNER_TEMP/watcom"
+          test -x "$RUNNER_TEMP/watcom/binl64/wcc"
+          test -x "$RUNNER_TEMP/watcom/binl64/wlink"
+
+      - name: Apply 16-bit DOS compatibility patch
+        shell: bash
+        run: |
+          python ports/dos16/prepare_source.py --source "$RUNNER_TEMP/micropython-1.24.1"
+
+      - name: Build native 16-bit DOS executable
+        shell: bash
+        run: |
+          python ports/dos16/build.py \
+            --source "$RUNNER_TEMP/micropython-1.24.1" \
+            --watcom "$RUNNER_TEMP/watcom"
+
+      - name: Package unchanged PythonClock sources and runtime
+        shell: bash
+        run: |
+          python ports/dos16/package.py
+
+      # GitHub automatically downloads an artifact named PY86 as PY86.zip.
+      # Upload flat files, not the standalone zip, to avoid a double-zipped file.
+      - name: Publish PY86.zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: PY86
+          path: ports/dos16/dist/PY86/*
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 6
