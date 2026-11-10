@@ -47,7 +47,7 @@ def pytool(name, inputs, output):
 mk = (src / 'py/py.mk').read_text()
 core = mk.split('PY_CORE_O_BASENAME = $(addprefix py/,', 1)[1].split(')', 1)[0]
 sources = [src / 'py' / (x + '.c') for x in re.findall(r'(\w+)\.o', core)]
-sources += [ROOT / 'port/main.c', ROOT / 'port/moddostime.c',
+sources += [ROOT / 'port/main.c', ROOT / 'port/moddostime.c', src / 'extmod/modrandom.c',
             src / 'shared/readline/readline.c']
 
 if not args.only and not args.resume:
@@ -103,6 +103,4 @@ print('Built', build / 'py86.exe')
 
 
 
-# The lightweight datetime shim is a Python source module, not part of the EXE.
 shutil.copy2(ROOT / 'stdlib/datetime.py', build / 'datetime.py')
-print('Staged', build / 'datetime.py')

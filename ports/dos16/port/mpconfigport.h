@@ -1,5 +1,13 @@
 #include <stdint.h>
 #include <stdlib.h>
+#include <time.h>
+#define MICROPY_PY_RANDOM (1)
+#define MICROPY_PY_RANDOM_EXTRA_FUNCS (1)
+#define MICROPY_MODULE_BUILTIN_INIT (1)
+#define MICROPY_PY_MATH_CONSTANTS (0) /* Watcom C16 NAN/INFINITY are not compile-time constants */
+#define MICROPY_PY_MATH_ISCLOSE (1)
+#define MICROPY_PY_MATH_FACTORIAL (1)
+#define MICROPY_PY_RANDOM_SEED_INIT_FUNC ((unsigned long)time(NULL))
 #include <limits.h>
 #define MICROPY_CONFIG_ROM_LEVEL (MICROPY_CONFIG_ROM_LEVEL_CORE_FEATURES)
 #define MICROPY_OBJ_REPR (MICROPY_OBJ_REPR_B)
@@ -30,7 +38,7 @@
 #define MICROPY_PY_IO (0)
 #define MICROPY_CPYTHON_COMPAT (1)
 #define MICROPY_PY___FILE__ (1)
-#define MICROPY_PY_MATH (0)
+#define MICROPY_PY_MATH (1)
 #define MICROPY_ALLOC_PATH_MAX (128)
 #define MICROPY_ALLOC_PARSE_CHUNK_INIT (16)
 #define MICROPY_STACK_CHECK (1)

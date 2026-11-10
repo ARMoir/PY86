@@ -15,6 +15,9 @@ py86 CLOCKAPI.PY > CLOCKAPI.OUT
 if errorlevel 1 goto fail
 py86 --home-cls CLKTEST.PY > CLOCK.OUT
 if errorlevel 1 goto fail
+echo scratch> P86TMP.TXT
+py86 LIBTEST.PY > LIBTEST.OUT
+if errorlevel 1 goto fail
 py86 ERROR.PY > ERROR.OUT
 if not errorlevel 1 goto fail
 echo PASS > RESULT.TXT

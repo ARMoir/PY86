@@ -166,3 +166,43 @@ Plain `PY86 CLOCK.PY` retains normal `cls` clearing behavior, so other programs
 aren't affected. Cursor-home mode is intended for fixed-size full-screen text
 programs; differing line lengths or stray output may leave old characters.
 The mode assumes a DOS BIOS-compatible text console.
+
+
+## Expanded standard-library imports (16-bit DOS)
+
+The DOS build enables MicroPython 1.24.1's C-backed **\`math\`** and
+**\`random\`** modules and extends Py86's DOS-backed **\`os\`** and **\`time\`**
+modules. The goal is usable Python 3 APIs without needing newer x86 hardware.
+
+| Import | Available APIs in this port |
+| --- | --- |
+| \`math\` | Core math functions such as \`sqrt\`, \`sin\`, \`cos\`, \`tan\`, \`log\`, \`exp\`, \`floor\`, \`ceil\`, \`isclose\`, \`factorial\`, plus \`pi\` and \`e\` |
+| \`random\` | Upstream MicroPython native generator: \`seed\`, \`getrandbits\`, \`random\`, \`randrange\`, \`randint\`, \`choice\`, \`uniform\` |
+| \`os\` | \`name='dos'\`, \`sep\`, \`system\`, \`getcwd\`, \`chdir\`, \`listdir\`, \`mkdir\`, \`rmdir\`, \`rename\`, \`remove\`, \`unlink\`, \`stat\`, \`getenv\` |
+| \`time\` | \`sleep\`, \`sleep_ms\`, \`time\`, \`localtime\` (current time or supplied timestamp), \`ticks_ms\`, \`ticks_diff\` |
+
+### Known limitations
+
+- \`math.tau\`, \`math.inf\`, \`math.nan\` are disabled because Open Watcom C16
+  does not support their required compile-time constant expressions.
+- \`random\` uses a **non-cryptographic** pseudo-random number generator. It is
+  not the full CPython \`random\` API (\`shuffle\`, \`sample\`, distributions, etc.).
+  Seed it explicitly for repeatable results.
+- DOS filesystem names are limited by the native DOS/Watcom interfaces
+  (normally 8.3 under DOS 6.22); \`os.path\` is not implemented.
+  \`os.stat\` returns a 10-element stat tuple, but POSIX metadata fields are
+  not necessarily meaningful on DOS.
+- \`time\` uses the DOS wall clock and BIOS ticks, which have approximately
+  **55 ms** resolution. \`ticks_ms\` wraps each DOS day, and \`ticks_diff\`
+  handles that wrap for sufficiently short intervals. Date/time timezone
+  conversion depends on the DOS C runtime, not a zone-information database.
+  Dates after the 32-bit \`time_t\` limit may not work.
+- This is not the complete CPython standard library. The existing 48 KB
+  Python heap and 16-bit real-mode memory restrictions still apply.
+
+The new \`tests/LIBTEST.PY\` exercises representative functionality from all
+four modules, including DOS directory/file operations, seeded random sequences,
+mathematical functions, and BIOS-tick sleeps. The DOSBox test runner includes
+it, but the automatic GitHub Actions workflow remains **build/package only**.
+A successful CI build is not a claim that these APIs have been exercised on
+the physical Tandy.
