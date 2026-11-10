@@ -14,7 +14,7 @@ Tandy 1000 EX test or independent rebuild is claimed here.**
 The port requires an exact checkout of **MicroPython v1.24.1**, commit
 `ecfdd5d6f9be971852003c2049600dc7b3e2a838`. **Do not apply the patch to current
 `master`**: this repository has advanced since the port was developed. The
-`compat-v1.24.1.patch` file is a complete, reproducible diff of the 53 changed
+`compat-v1.24.1.patch` file is a complete, reproducible diff of the 31 substantively changed
 `py/` source files from the uploaded development snapshot. Its changes include
 Open Watcom C compatibility, 16-bit pointer/GC fixes, parse-node alignment,
 integer/floating-point conversions, and VM/label adaptations.
