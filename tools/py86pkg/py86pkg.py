@@ -216,10 +216,12 @@ def read_local(source):
 class Downgrade(ast.NodeTransformer):
     """Safe-by-default subset of syntax lowering; do not invent package semantics."""
 
-    def __init__(self, strip_docstrings=False):
+    def __init__(self, strip_docstrings=False, library_only=False):
         self.strip_docstrings = strip_docstrings
+        self.library_only = library_only
         self.counts = {"annotations": 0, "simple_fstrings": 0,
-                       "typing_imports": 0, "docstrings": 0}
+                       "typing_imports": 0, "docstrings": 0,
+                       "verbose_regex": 0, "removed_cli": 0}
         self.errors = []
 
     def clean_body(self, node):
@@ -234,6 +236,17 @@ class Downgrade(ast.NodeTransformer):
 
     def visit_Module(self, node):
         self.generic_visit(node)
+        if self.library_only:
+            new_body = []
+            for stmt in node.body:
+                if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)) and stmt.name in ("main", "parse_args"):
+                    self.counts["removed_cli"] += 1
+                elif is_main_guard(stmt):
+                    self.counts["removed_cli"] += 1
+                else:
+                    new_body.append(stmt)
+            node.body = new_body
+            remove_unused_plain_imports(node)
         return self.clean_body(node)
 
     def visit_ClassDef(self, node):
@@ -262,6 +275,31 @@ class Downgrade(ast.NodeTransformer):
         if node.value is None:
             return ast.copy_location(ast.Pass(), node)
         return ast.copy_location(ast.Assign(targets=[node.target], value=node.value), node)
+
+    def visit_Call(self, node):
+        self.generic_visit(node)
+        fn = node.func
+        if (isinstance(fn, ast.Attribute) and fn.attr == "compile"
+                and isinstance(fn.value, ast.Name) and fn.value.id == "re"
+                and len(node.args) == 2 and not node.keywords
+                and isinstance(node.args[0], ast.Constant)
+                and isinstance(node.args[0].value, str)
+                and isinstance(node.args[1], ast.Attribute)
+                and isinstance(node.args[1].value, ast.Name)
+                and node.args[1].value.id == "re"
+                and node.args[1].attr in ("VERBOSE", "X")):
+            original = node.args[0].value
+            compact = compact_verbose_regex(original)
+            try:
+                if re.compile(original, re.VERBOSE).pattern is None:
+                    raise ValueError("Invalid original regex")
+                re.compile(compact)
+            except re.error as error:
+                self.errors.append("Cannot lower verbose regex: " + str(error))
+                return node
+            node.args = [ast.Constant(value=compact)]
+            self.counts["verbose_regex"] += 1
+        return node
 
     def visit_JoinedStr(self, node):
         values = []
@@ -314,13 +352,75 @@ def remove_unused_typing(tree, counts):
     tree.body = new_body
 
 
+def is_main_guard(stmt):
+    if not isinstance(stmt, ast.If):
+        return False
+    try:
+        left, op, right = stmt.test.left, stmt.test.ops[0], stmt.test.comparators[0]
+    except (AttributeError, IndexError):
+        return False
+    return (isinstance(op, ast.Eq) and isinstance(left, ast.Name)
+            and left.id == "__name__" and isinstance(right, ast.Constant)
+            and right.value == "__main__")
+
+
+def remove_unused_plain_imports(tree):
+    """Only for explicit library-only mode; CLI-only imports become unused."""
+    referenced = {n.id for n in ast.walk(tree)
+                  if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)}
+    new_body = []
+    for stmt in tree.body:
+        if isinstance(stmt, ast.Import):
+            stmt.names = [alias for alias in stmt.names
+                          if (alias.asname or alias.name.split(".")[0]) in referenced]
+            if not stmt.names:
+                continue
+        new_body.append(stmt)
+    tree.body = new_body
+
+
+def compact_verbose_regex(pattern):
+    """Remove re.VERBOSE comments/whitespace outside escaped and [] regions."""
+    out = []
+    inside_class = False
+    i = 0
+    while i < len(pattern):
+        c = pattern[i]
+        if c == "\\":
+            out.append(pattern[i:i + 2])
+            i += 2
+            continue
+        if c == "[":
+            inside_class = True
+        elif c == "]":
+            inside_class = False
+        if not inside_class and c == "#":
+            while i < len(pattern) and pattern[i] not in "\r\n":
+                i += 1
+            continue
+        if not inside_class and c in " \t\r\n\v\f":
+            i += 1
+            continue
+        out.append(c)
+        i += 1
+    result = "".join(out)
+    # MicroPython's small regex engine may not support counted repetitions.
+    # Expand bounded repetitions of single literal atoms, preserving behavior.
+    def repeat(match):
+        atom, minimum, maximum = match.group(1), int(match.group(2)), int(match.group(3))
+        if maximum < minimum or maximum > 16:
+            raise ValueError("Unsafe bounded repeat in verbose regex")
+        return atom * minimum + (atom + "?") * (maximum - minimum)
+    return re.sub(r"([A-Za-z0-9])\{(\d+),(\d+)\}", repeat, result)
+
+
 def unpack_source(data):
     encoding, _ = tokenize.detect_encoding(io.BytesIO(data).readline)
     return data.decode(encoding)
 
 
-def transform(data, path, strip_docstrings):
-    changes = Downgrade(strip_docstrings=strip_docstrings)
+def transform(data, path, strip_docstrings, library_only=False):
+    changes = Downgrade(strip_docstrings=strip_docstrings, library_only=library_only)
     problems = []
     try:
         text = unpack_source(data)
@@ -396,16 +496,24 @@ def check_dos_paths(paths):
 
 
 def convert(source_files, profile, output, package, version=None,
-            requirements=(), native_files=(), strip_docstrings=False):
+            requirements=(), native_files=(), strip_docstrings=False,
+            library_only=False):
     if not source_files:
         raise ValueError("No Python source files found")
     issues = []
     result = {}
     stats = {"annotations": 0, "simple_fstrings": 0, "typing_imports": 0,
-             "docstrings": 0}
-    local_modules = {p.parts[0].split(".")[0] for p in source_files}
-    for path, data in sorted(source_files.items(), key=lambda x: str(x[0])):
-        converted, changes, failures = transform(data, path, strip_docstrings)
+             "docstrings": 0, "verbose_regex": 0, "removed_cli": 0}
+    selected = {p: data for p, data in source_files.items()
+                if not (library_only and p.name == "__main__.py")}
+    # Single-module packages can be installed as a plain DOS module.
+    flattened = (library_only and len(selected) == 1
+                 and next(iter(selected)).name == "__init__.py"
+                 and len(next(iter(selected)).parts) == 2)
+    local_modules = {p.parts[0].split(".")[0] for p in selected}
+    for path, data in sorted(selected.items(), key=lambda x: str(x[0])):
+        output_path = PurePosixPath(path.parts[0] + ".py") if flattened else path
+        converted, changes, failures = transform(data, path, strip_docstrings, library_only)
         for key, count in changes.items():
             stats[key] += count
         issues.extend(failures)
@@ -415,8 +523,8 @@ def convert(source_files, profile, output, package, version=None,
             issues.append(issue(path, "error", "source_size",
                                 "Converted file exceeds %d-byte source limit" %
                                 profile["max_source_bytes"]))
-        issues.extend(check_imports(converted, path, local_modules))
-        result[str(path)] = converted
+        issues.extend(check_imports(converted, output_path, local_modules))
+        result[str(output_path)] = converted
     issues.extend(check_dos_paths(result))
     if requirements:
         issues.append(issue("*", "warning", "dependencies",
@@ -425,6 +533,9 @@ def convert(source_files, profile, output, package, version=None,
         issues.append(issue("*", "warning", "native_source",
                             "C/native files were not converted: " +
                             ", ".join(native_files[:5])))
+    if library_only:
+        issues.append(issue("*", "warning", "library_only",
+                            "CLI entrypoints were excluded; public CLI functions may be missing"))
     if strip_docstrings:
         issues.append(issue("*", "warning", "changed_semantics",
                             "Removed docstrings can change __doc__ behavior"))
@@ -471,6 +582,8 @@ def main(argv=None):
     conv.add_argument("--source", type=Path, help="Offline local directory or sdist/wheel archive")
     conv.add_argument("--profile", type=Path, default=DEFAULT_PROFILE)
     conv.add_argument("--output", type=Path, default=Path("PY86PKG.ZIP"))
+    conv.add_argument("--library-only", action="store_true",
+                      help="Exclude CLI entrypoints; flatten single-module packages for DOS")
     conv.add_argument("--strip-docstrings", action="store_true",
                       help="Trade docstring behavior for smaller source")
     args = parser.parse_args(argv)
@@ -490,7 +603,8 @@ def main(argv=None):
             raw, filename, version, requirements = download_release(name, requested_version)
             files, native_files = read_archive(raw, filename)
         report = convert(files, profile, args.output, name, version,
-                         requirements, native_files, args.strip_docstrings)
+                         requirements, native_files, args.strip_docstrings,
+                         args.library_only)
     except (ValueError, OSError, KeyError, urllib.error.URLError,
             zipfile.BadZipFile, tarfile.TarError) as exc:
         print("py86pkg: " + str(exc), file=sys.stderr)
