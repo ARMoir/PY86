@@ -28,6 +28,23 @@ py86 HELP.PY > HELP.OUT
 if errorlevel 1 goto fail
 py86 FILEIO.PY > FILEIO.OUT
 if errorlevel 1 goto fail
+py86 FILEMORE.PY > FILEMORE.OUT
+if errorlevel 1 goto fail
+py86 ARGS.PY alpha beta > ARGS.OUT
+if errorlevel 1 goto fail
+py86 -c "import sys;assert sys.argv==['-c','one','two'];print('PASS command_argv')" one two > CARGS.OUT
+if errorlevel 1 goto fail
+py86 --help > CLIHELP.OUT
+if errorlevel 1 goto fail
+py86 -h > HELPFLAG.OUT
+if errorlevel 1 goto fail
+py86 -V > VERSION.OUT
+if errorlevel 1 goto fail
+py86 --version > VERNAME.OUT
+if errorlevel 1 goto fail
+py86 -c > CMISS.OUT
+if not errorlevel 2 goto fail
+if errorlevel 3 goto fail
 set PY86_TEST_CTRLC=1
 py86 CTRLC.PY > CTRLC.OUT
 if errorlevel 1 goto fail

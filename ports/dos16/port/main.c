@@ -31,7 +31,8 @@ const char py86_help_text[] =
     "Modules: os, sys, time, datetime, math, random, json, re, hashlib, gc, errno\n"
     "Run: PY86 SCRIPT.PY or PY86 for the interactive prompt.\n"
     "Ctrl+C interrupts a running program; Ctrl+Z then Enter exits the REPL.\n"
-    "For built-in object information, use help(obj).\n";
+    "For built-in object information, use help(obj).\n"
+    "Type help('modules') to list the available built-in modules.\n";
 
 /* Signal handler only records a flag; MicroPython exceptions are scheduled
  * later in the VM, never from an asynchronous DOS signal handler. */
@@ -204,20 +205,51 @@ int main(int argc, char **argv) {
     py86_console_input = isatty(0);
     py86_test_ctrl_c = getenv("PY86_TEST_CTRLC") != NULL;
     signal(SIGINT, py86_sigint);
+    /* Command switches must be handled before sys.argv is populated.
+     * -c consumes a Python code argument but must not place it in sys.argv.
+     * The -h/-V paths return without loading/running any user Python.
+     * --home-cls is retained as a DOS-specific pre-command switch. */
     /* Keep ordinary cls behavior by default. --home-cls is useful for
        fixed-width full-frame text apps such as the unchanged PythonClock. */
     if (argc > 1 && strcmp(argv[1], "--home-cls") == 0) {
         first_arg = 2;
         py86_set_home_cls(1);
     }
-    mp_obj_list_append(mp_sys_path, MP_OBJ_NEW_QSTR(MP_QSTR_));
-    for (dummy = first_arg; dummy < argc; ++dummy)
-        mp_obj_list_append(mp_sys_argv, mp_obj_new_str(argv[dummy], strlen(argv[dummy])));
-    if (argc > first_arg) {
-        if (argc == first_arg + 2 && strcmp(argv[first_arg], "-c") == 0)
-            result = execute(argv[first_arg + 1], 0, MP_PARSE_FILE_INPUT);
-        else result = execute(argv[first_arg], 1, MP_PARSE_FILE_INPUT);
+    if (argc > first_arg &&
+        (strcmp(argv[first_arg], "-h") == 0 ||
+         strcmp(argv[first_arg], "--help") == 0)) {
+        puts("Usage: PY86 [--home-cls] [script.py [args...]]");
+        puts("       PY86 [--home-cls] -c \"code\" [args...]");
+        puts("       PY86 -h | --help | -V | --version");
+        puts("No script starts the interactive interpreter.");
+        puts("Ctrl+C interrupts Python; Ctrl+Z then Enter exits the prompt.");
+        goto done;
+    }
+    if (argc > first_arg &&
+        (strcmp(argv[first_arg], "-V") == 0 ||
+         strcmp(argv[first_arg], "--version") == 0)) {
+        puts("Py86 0.1 (MicroPython 1.24.1, 16-bit DOS, 8086/V20)");
+        goto done;
+    }
+    if (argc > first_arg && strcmp(argv[first_arg], "-c") == 0) {
+        if (first_arg + 1 >= argc) {
+            fputs("PY86: -c requires a Python command\n", stderr);
+            result = 2;
+            goto done;
+        }
+        mp_obj_list_append(mp_sys_path, MP_OBJ_NEW_QSTR(MP_QSTR_));
+        mp_obj_list_append(mp_sys_argv, mp_obj_new_str("-c", 2));
+        for (dummy = first_arg + 2; dummy < argc; ++dummy)
+            mp_obj_list_append(mp_sys_argv, mp_obj_new_str(argv[dummy], strlen(argv[dummy])));
+        result = execute(argv[first_arg + 1], 0, MP_PARSE_FILE_INPUT);
+    } else if (argc > first_arg) {
+        mp_obj_list_append(mp_sys_path, MP_OBJ_NEW_QSTR(MP_QSTR_));
+        for (dummy = first_arg; dummy < argc; ++dummy)
+            mp_obj_list_append(mp_sys_argv, mp_obj_new_str(argv[dummy], strlen(argv[dummy])));
+        result = execute(argv[first_arg], 1, MP_PARSE_FILE_INPUT);
     } else {
+        mp_obj_list_append(mp_sys_path, MP_OBJ_NEW_QSTR(MP_QSTR_));
+        mp_obj_list_append(mp_sys_argv, mp_obj_new_str("", 0));
         puts("Py86 0.1 (experimental) - Python 3 for 16-bit DOS");
         puts("Based on MicroPython 1.24.1");
         puts("Blank line ends a block; Ctrl-Z then Enter exits.");
@@ -259,6 +291,7 @@ int main(int argc, char **argv) {
             }
         }
     }
+done:
     signal(SIGINT, SIG_DFL);
     mp_deinit();
     free(heap);

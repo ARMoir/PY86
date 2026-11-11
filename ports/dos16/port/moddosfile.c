@@ -92,6 +92,88 @@ static const mp_stream_p_t py86_file_binary_stream = {
     .ioctl = py86_file_ioctl,
 };
 
+
+/* A single C loop replaces MicroPython's generic readline() path which
+ * dispatches through the stream protocol and grows the vstr per character.
+ * Watcom's getc() benefits from the DOS CRT FILE* buffer.  Use the same
+ * translation rules as the generic path (text mode maps CRLF, binary doesn't).
+ * The old path is retained for reproducible A/B measurements.
+ */
+#if PY86_FAST_READLINE
+static mp_obj_t py86_file_readline_core(mp_obj_t self_in, mp_int_t limit) {
+    py86_file_t *self = MP_OBJ_TO_PTR(self_in);
+    vstr_t buf;
+    if (self->fp == NULL) {
+        mp_raise_OSError(MP_EBADF);
+    }
+    vstr_init(&buf, 64);
+    while (limit == -1 || limit-- > 0) {
+        int ch = fgetc(self->fp);
+        if (ch == EOF) {
+            if (ferror(self->fp)) {
+                mp_raise_OSError(errno ? errno : MP_EIO);
+            }
+            break;
+        }
+        vstr_add_byte(&buf, (byte)ch);
+        if (ch == '\n') {
+            break;
+        }
+    }
+    if (self->base.type == &py86_type_textfile) {
+        return mp_obj_new_str_from_vstr(&buf);
+    }
+    return mp_obj_new_bytes_from_vstr(&buf);
+}
+
+static mp_obj_t py86_file_readline(size_t n_args, const mp_obj_t *args) {
+    mp_int_t max_len = -1;
+    if (n_args == 2) {
+        max_len = mp_obj_get_int(args[1]);
+        if (max_len < 0) max_len = -1;
+    }
+    return py86_file_readline_core(args[0], max_len);
+}
+MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(py86_file_readline_obj, 1, 2, py86_file_readline);
+
+static mp_obj_t py86_file_readlines(mp_obj_t self_in) {
+    mp_obj_t lines = mp_obj_new_list(0, NULL);
+    for (;;) {
+        mp_obj_t line = py86_file_readline_core(self_in, -1);
+        if (!mp_obj_is_true(line)) break;
+        mp_obj_list_append(lines, line);
+    }
+    return lines;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(py86_file_readlines_obj, py86_file_readlines);
+
+static mp_obj_t py86_file_iternext(mp_obj_t self_in) {
+    mp_obj_t line = py86_file_readline_core(self_in, -1);
+    return mp_obj_is_true(line) ? line : MP_OBJ_STOP_ITERATION;
+}
+#endif
+
+/* Reuse the existing stream writer and buffer protocol, avoiding a new
+ * intermediate Python string for each line.  writelines does not add '\n'. */
+static mp_obj_t py86_file_writelines(mp_obj_t self_in, mp_obj_t iterable) {
+    mp_obj_t it;
+    mp_obj_t item;
+    py86_file_t *self = MP_OBJ_TO_PTR(self_in);
+    if (self->fp == NULL) mp_raise_OSError(MP_EBADF);
+    it = mp_getiter(iterable, NULL);
+    while ((item = mp_iternext(it)) != MP_OBJ_STOP_ITERATION) {
+        mp_buffer_info_t b;
+        int error = 0;
+        mp_uint_t written;
+        mp_get_buffer_raise(item, &b, MP_BUFFER_READ);
+        written = mp_stream_rw(self_in, b.buf, b.len, &error, MP_STREAM_RW_WRITE);
+        if (error != 0) mp_raise_OSError(error);
+        if (written != b.len) mp_raise_OSError(MP_EIO);
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(py86_file_writelines_obj, py86_file_writelines);
+
 static mp_obj_t py86_file_enter(mp_obj_t self_in) {
     py86_file_t *self = MP_OBJ_TO_PTR(self_in);
     if (self->fp == NULL) mp_raise_OSError(MP_EBADF);
@@ -113,9 +195,16 @@ static void py86_file_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest) {
 
 static const mp_rom_map_elem_t py86_file_locals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_read), MP_ROM_PTR(&mp_stream_read_obj) },
+    #if PY86_FAST_READLINE
+    { MP_ROM_QSTR(MP_QSTR_readline), MP_ROM_PTR(&py86_file_readline_obj) },
+    { MP_ROM_QSTR(MP_QSTR_readlines), MP_ROM_PTR(&py86_file_readlines_obj) },
+    #else
     { MP_ROM_QSTR(MP_QSTR_readline), MP_ROM_PTR(&mp_stream_unbuffered_readline_obj) },
     { MP_ROM_QSTR(MP_QSTR_readlines), MP_ROM_PTR(&mp_stream_unbuffered_readlines_obj) },
+    #endif
+    { MP_ROM_QSTR(MP_QSTR_readinto), MP_ROM_PTR(&mp_stream_readinto_obj) },
     { MP_ROM_QSTR(MP_QSTR_write), MP_ROM_PTR(&mp_stream_write_obj) },
+    { MP_ROM_QSTR(MP_QSTR_writelines), MP_ROM_PTR(&py86_file_writelines_obj) },
     { MP_ROM_QSTR(MP_QSTR_seek), MP_ROM_PTR(&mp_stream_seek_obj) },
     { MP_ROM_QSTR(MP_QSTR_tell), MP_ROM_PTR(&mp_stream_tell_obj) },
     { MP_ROM_QSTR(MP_QSTR_flush), MP_ROM_PTR(&mp_stream_flush_obj) },
@@ -128,7 +217,12 @@ static MP_DEFINE_CONST_DICT(py86_file_locals, py86_file_locals_table);
 static MP_DEFINE_CONST_OBJ_TYPE(
     py86_type_textfile,
     MP_QSTR_TextFile,
+    #if PY86_FAST_READLINE
+    MP_TYPE_FLAG_ITER_IS_ITERNEXT,
+    iter, py86_file_iternext,
+    #else
     MP_TYPE_FLAG_ITER_IS_STREAM,
+    #endif
     protocol, &py86_file_text_stream,
     locals_dict, &py86_file_locals,
     attr, py86_file_attr
@@ -137,7 +231,12 @@ static MP_DEFINE_CONST_OBJ_TYPE(
 static MP_DEFINE_CONST_OBJ_TYPE(
     py86_type_binaryfile,
     MP_QSTR_BinaryFile,
+    #if PY86_FAST_READLINE
+    MP_TYPE_FLAG_ITER_IS_ITERNEXT,
+    iter, py86_file_iternext,
+    #else
     MP_TYPE_FLAG_ITER_IS_STREAM,
+    #endif
     protocol, &py86_file_binary_stream,
     locals_dict, &py86_file_locals,
     attr, py86_file_attr

@@ -56,7 +56,7 @@
 #define MICROPY_PY_BUILTINS_INPUT (1)
 #define MICROPY_PY_BUILTINS_HELP (1)
 #define MICROPY_PY_BUILTINS_HELP_TEXT py86_help_text
-#define MICROPY_PY_BUILTINS_HELP_MODULES (0)
+#define MICROPY_PY_BUILTINS_HELP_MODULES (1)
 #define MICROPY_KBD_EXCEPTION (1)
 #define MICROPY_VM_HOOK_LOOP py86_vm_hook_loop();
 void py86_vm_hook_loop(void);

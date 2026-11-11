@@ -18,6 +18,8 @@ p.add_argument('--only', default='')
 p.add_argument('--string-mode', choices=('original', 'char-cache', 'lazy-hash', 'both'),
                default='both', help='String optimization (production default: both)')
 p.add_argument('--resume', action='store_true')
+p.add_argument('--file-readline-mode', choices=('generic', 'fast'), default='fast',
+               help='DOS file.readline implementation (default: fast)')
 p.add_argument('--vm-mode', choices=('baseline', 'fast-decode', 'compiler', 'far128', 'near384', 'combined',
                                      'inline', 'intrinsic', 'loop', 'reopt'),
                default='baseline', help='8086 VM dispatch, compiler and near/far data experiment')
@@ -62,6 +64,7 @@ threshold, vm_optimizations, fast_uint = vm_configs[args.vm_mode]
 flags = ['-q', '-bt=dos', '-0', '-ml', '-za99', '-ot', '-s', '-fpc', '-zp2',
          '-zt=' + str(threshold), *vm_optimizations,
          '-dPY86_VM_FAST_UINT=' + str(fast_uint),
+         '-dPY86_FAST_READLINE=' + ('1' if args.file_readline_mode == 'fast' else '0'),
          *lookup_flags[args.lookup_mode],
          '-dPY86_CHAR_QSTR_CACHE=' + ('1' if args.string_mode in ('char-cache', 'both') else '0'),
          '-dPY86_LAZY_STR_HASH=' + ('1' if args.string_mode in ('lazy-hash', 'both') else '0'),

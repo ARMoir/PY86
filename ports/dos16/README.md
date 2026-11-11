@@ -541,3 +541,24 @@ use bounded `read(n)` for large files. Explicitly close open handles when
 not using a context manager. Advanced CPython `open()` features such as
 encoding conversion, buffering control, `x` exclusive-create mode and
 complete `io` module compatibility are not yet implemented.
+
+
+### DOS file I/O and command-line compatibility additions (Nov 2026)
+
+`open()` file objects now implement `readinto(buffer)` using MicroPython's
+existing stream buffer protocol and `writelines(iterable)` using the existing
+DOS writer. Neither requires allocating a new Python string per operation.
+The optimized C `readline(size=-1)` and line iterator use buffered Watcom
+`fgetc` instead of per-byte generic MicroPython stream calls. All operations
+support text (DOS CRLF translation) and binary files. `readlines()` follows
+the optimized line routine. Use `build.py --file-readline-mode generic` to
+reproduce and benchmark the previous unbuffered implementation.
+
+`help('modules')` lists compiled MicroPython/Py86 modules.
+`PY86 -h` / `--help` shows command usage; `PY86 -V` / `--version`
+shows the interpreter version and target architecture. Python command
+`PY86 -c "code" [arguments...]` now sets `sys.argv[0]` to `-c`, omits
+the command string from `sys.argv`, and passes the subsequent arguments.
+Running scripts retains `sys.argv[0]` as the script filename. The interactive
+REPL sets it to an empty string. A missing `-c` command returns DOS
+`ERRORLEVEL 2`. All options retain `--home-cls` compatibility.
