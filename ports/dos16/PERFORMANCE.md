@@ -86,7 +86,15 @@ passed the full regression suite. Fixed DOSBox 8086 at 20,000 cycles:
 | Repeated concatenation, ms/add | 0.917 | approx. 0.734 | **25% higher throughput** |
 | Isolated two-frame PythonClock, ms/frame | 219.5 | approx. 192.5 | **14% higher throughput** |
 | GC clock profile, ms/frame | 247 | approx. 192.5 | 28.3% higher throughput |
-| String splitting in threshold profile | 22 ms per split | approx. 11 ms | about 2× faster |
+| String splitting, default GC threshold | 22 ms per split | 22 ms per split | no measurable improvement in combined run |
+
+The ASCII cache alone improved the dedicated split benchmark by about 2× at
+the default threshold (22 to 11 ms per split), and often by 3× at more
+aggressive GC thresholds, but the **combined** build showed no split speedup
+at the default GC threshold in this run. Short splits cross only one or
+two BIOS ticks, so those individual samples are highly quantized. The
+measured gains in long concatenation and the overall clock workload are
+more useful than any single short splitting measurement.
 
 The BIOS clock resolves about 55 ms and the two-frame results should not be
 overinterpreted. These are *not* physical 7 MHz V20 timings. The combined EXE
