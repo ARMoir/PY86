@@ -179,7 +179,8 @@ else:
     # Startup timing must be measured by native PY86 code (not host Python).
     for label in ('INTERPRETER STARTUP', 'time.init_ms()', 'time.startup_ms()', 'time.launch_ms()',
                   'Native VM startup:', 'First Python code:', 'Full child launch:',
-                  'Source parse/dispatch:', 'EXE loading before C main'):
+                  'Source parse/dispatch:', 'DOS EXE load / launcher:',
+                  'Native times exclude the DOS loader'):
         if label not in demo_text:
             missing.append('PY86.LOG: missing startup timing ' + label)
     # The showcase must expose the actual operations and their computed
