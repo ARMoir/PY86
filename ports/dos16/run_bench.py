@@ -18,6 +18,7 @@ def main():
     p.add_argument("--dosbox", required=True)
     p.add_argument("--mode", default="baseline")
     p.add_argument("--timeout", type=int, default=220)
+    p.add_argument("--vm-tests", action="store_true", help="Include dispatch microbenchmarks")
     args = p.parse_args()
 
     build = ROOT / "build"
@@ -28,10 +29,13 @@ def main():
     for f in (ROOT / "tests" / "pythonclock").glob("*.py"):
         shutil.copy2(f, stage / f.name)
     shutil.copy2(build / "py86.exe", stage / "PY86.EXE")
+    vm_commands = (b"PY86 VMTEST.PY > VMTEST.OUT\r\n"
+                   b"if errorlevel 1 goto fail\r\n") if args.vm_tests else b""
     (stage / "BENCH.BAT").write_bytes(
         b"@echo off\r\n"
         b"PY86 BENCH1.PY > BENCH1.OUT\r\n"
         b"if errorlevel 1 goto fail\r\n"
+        + vm_commands +
         b"PY86 FRAMEBEN.PY > FRAMEBEN.OUT\r\n"
         b"if errorlevel 1 goto fail\r\n"
         b"PY86 FRAMEBEN.PY >> FRAMEBEN.OUT\r\n"
@@ -43,7 +47,7 @@ def main():
         b":fail\r\necho FAIL > BENCH.RES\r\n"
         b":done\r\n"
     )
-    for name in ("BENCH1.OUT", "FRAMEBEN.OUT", "BENCH.RES"):
+    for name in ("BENCH1.OUT", "VMTEST.OUT", "FRAMEBEN.OUT", "BENCH.RES"):
         (stage / name).unlink(missing_ok=True)
 
     conf = build / "bench-dosbox.conf"
@@ -68,7 +72,8 @@ def main():
     parsed = {}
     memories = {}
     logs = {}
-    for script in ("BENCH1", "FRAMEBEN"):
+    for script in (("BENCH1", "VMTEST", "FRAMEBEN") if args.vm_tests
+                   else ("BENCH1", "FRAMEBEN")):
         contents = (stage / (script + ".OUT")).read_text(errors="replace")
         logs[script] = contents
         parsed[script] = {}
@@ -102,6 +107,8 @@ def main():
             }
     expected = {"local_int", "global_int", "dict_lookup", "instance_attr",
                 "bound_method", "module_attr", "concat", "clock_frame"}
+    if args.vm_tests:
+        expected.update(("vm_load", "vm_branch", "vm_call", "vm_global", "vm_tuple"))
     result = (stage / "BENCH.RES").read_text().strip() if (stage / "BENCH.RES").exists() else "NO RESULT"
     if result != "PASS" or set(summary) != expected or any("Traceback" in text for text in logs.values()):
         print(json.dumps({"status": result, "raw": logs, "summary": summary}, indent=2))
@@ -113,6 +120,7 @@ def main():
         "disclaimer": "Relative DOSBox results, not physical V20 clock speed",
         "executable_bytes": (build / "py86.exe").stat().st_size,
         "python_heap_bytes": 48000,
+        "vm_tests": args.vm_tests,
         "memory": memories,
         "summary": summary,
         "trials": parsed,

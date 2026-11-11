@@ -26,7 +26,8 @@ def main():
         parser.error("source HEAD must be pinned to v1.24.1 / " + PINNED_SHA)
     # Reproducible, idempotent core and optional-module 16-bit adaptations.
     for patch_name in ("compat-v1.24.1.patch", "compat-extra-libs-v1.24.1.patch",
-                       "compat-strcache-v1.24.1.patch", "compat-lazyhash-v1.24.1.patch"):
+                       "compat-strcache-v1.24.1.patch", "compat-lazyhash-v1.24.1.patch",
+                       "compat-vmdecode-v1.24.1.patch"):
         patch = HERE / patch_name
         if not patch.is_file():
             parser.error("missing " + str(patch))

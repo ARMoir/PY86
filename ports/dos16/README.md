@@ -399,3 +399,24 @@ More frequent collections provided more post-collection free heap but slowed
 execution, so the default GC threshold is unchanged. See `PERFORMANCE.md`.
 The costly four-configuration profile is manually dispatched, while normal
 push CI continues to execute all correctness tests and a production benchmark.
+
+
+## 16-bit VM dispatch and segmented memory experiments
+
+The `build.py --vm-mode` option permits a controlled comparison of six
+8086-compatible builds: `baseline` (production, -ot and -zt=256),
+`fast-decode` (fast one-byte variable-length operand decode), `compiler`
+(Open Watcom -oi -ol -oe -oh), `far128` (-zt=128),
+`near384` (-zt=384), and `combined` (fast decode plus compiler flags,
+at the normal -zt=256 threshold). These options do not require a 286,
+change the 48 KB GC heap, or alter PythonClock's sources.
+
+`MICROPY_OPT_COMPUTED_GOTO` uses GCC's labels-as-values extension and is not
+supported by the Open Watcom C16 compiler; Py86 retains its portable
+`switch` VM dispatch. The experiment measures actual Python opcode
+execution, ordinary library workloads and PythonClock frame computation.
+It compiles every variant, runs the full DOSBox correctness suite, and
+uploads linker maps to inspect the 16-bit default data-group size.
+The 64 KB near-data limit means some higher -zt thresholds may not link.
+All results are DOSBox emulator comparisons, not 7 MHz V20 measurements;
+production remains on baseline flags until a candidate is verified.

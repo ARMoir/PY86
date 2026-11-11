@@ -18,6 +18,8 @@ p.add_argument('--only', default='')
 p.add_argument('--string-mode', choices=('original', 'char-cache', 'lazy-hash', 'both'),
                default='both', help='String optimization (production default: both)')
 p.add_argument('--resume', action='store_true')
+p.add_argument('--vm-mode', choices=('baseline', 'fast-decode', 'compiler', 'far128', 'near384', 'combined'),
+               default='baseline', help='8086 VM dispatch and near/far data experiment')
 p.add_argument('--lookup-mode', choices=('off', 'map', 'attr', 'both'),
                default='map', help='Lookup optimizations (production default: map)')
 args = p.parse_args()
@@ -42,7 +44,19 @@ lookup_flags = {
     'both': ['-dMICROPY_OPT_MAP_LOOKUP_CACHE=1',
              '-dMICROPY_OPT_LOAD_ATTR_FAST_PATH=1'],
 }
-flags = ['-q', '-bt=dos', '-0', '-ml', '-za99', '-ot', '-s', '-fpc', '-zp2', '-zt=256',
+# All variants remain 8086/V20 compatible. -zt chooses near-DGROUP data threshold.
+vm_configs = {
+    'baseline': (256, [], 0),
+    'fast-decode': (256, [], 1),
+    'compiler': (256, ['-oi', '-ol', '-oe', '-oh'], 0),
+    'far128': (128, [], 0),
+    'near384': (384, [], 0),
+    'combined': (256, ['-oi', '-ol', '-oe', '-oh'], 1),
+}
+threshold, vm_optimizations, fast_uint = vm_configs[args.vm_mode]
+flags = ['-q', '-bt=dos', '-0', '-ml', '-za99', '-ot', '-s', '-fpc', '-zp2',
+         '-zt=' + str(threshold), *vm_optimizations,
+         '-dPY86_VM_FAST_UINT=' + str(fast_uint),
          *lookup_flags[args.lookup_mode],
          '-dPY86_CHAR_QSTR_CACHE=' + ('1' if args.string_mode in ('char-cache', 'both') else '0'),
          '-dPY86_LAZY_STR_HASH=' + ('1' if args.string_mode in ('lazy-hash', 'both') else '0'),

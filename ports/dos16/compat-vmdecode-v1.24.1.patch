@@ -1,0 +1,31 @@
+diff --git a/py/vm.c b/py/vm.c
+--- a/py/vm.c
++++ b/py/vm.c
+@@ -57,9 +57,22 @@
+ // Exception stack also grows up, top element is also pointed at.
+ 
+-#define DECODE_UINT \
+-    mp_uint_t unum = 0; \
+-    do { \
+-        unum = (unum << 7) + (*ip & 0x7f); \
+-    } while ((*ip++ & 0x80) != 0)
++#if PY86_VM_FAST_UINT
++#define DECODE_UINT \
++    mp_uint_t unum; \
++    if ((ip[0] & 0x80) == 0) { \
++        unum = *ip++; \
++    } else { \
++        unum = 0; \
++        do { \
++            unum = (unum << 7) + (*ip & 0x7f); \
++        } while ((*ip++ & 0x80) != 0); \
++    }
++#else
++#define DECODE_UINT \
++    mp_uint_t unum = 0; \
++    do { \
++        unum = (unum << 7) + (*ip & 0x7f); \
++    } while ((*ip++ & 0x80) != 0)
++#endif
+ 
+ #define DECODE_ULABEL \
