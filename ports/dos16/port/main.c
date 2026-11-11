@@ -4,6 +4,10 @@
 #include <string.h>
 #include <setjmp.h>
 #include <sys/stat.h>
+#include <signal.h>
+#include <dos.h>
+#include <i86.h>
+#include <io.h>
 #include "py/compile.h"
 #include "py/runtime.h"
 #include "py/repl.h"
@@ -19,6 +23,51 @@ extern void py86_set_home_cls(int enabled);
 static char *stack_top;
 static void *heap;
 static int py86_exit_requested;
+
+/* Signal handler only records a flag; MicroPython exceptions are scheduled
+ * later in the VM, never from an asynchronous DOS signal handler. */
+static volatile sig_atomic_t py86_ctrl_c_flag;
+static unsigned short py86_vm_branches;
+static int py86_console_input;
+static int py86_test_ctrl_c;
+
+static void py86_sigint(int signal_number) {
+    (void)signal_number;
+    py86_ctrl_c_flag = 1;
+    signal(SIGINT, py86_sigint);
+}
+
+/* Called at branches, not per bytecode.  BIOS keyboard polling is gated to
+ * a real console and limited to once per 256 branches to protect the V20.
+ * BIOS INT 16h peeks without swallowing ordinary pending input; Ctrl+C
+ * alone is removed and turned into a catchable KeyboardInterrupt. */
+void py86_vm_hook_loop(void) {
+    if (++py86_vm_branches != 0) {
+        if ((py86_vm_branches & 255U) != 0) {
+            if (!py86_ctrl_c_flag) return;
+        }
+    }
+    if (py86_test_ctrl_c && py86_vm_branches >= 256U) {
+        py86_test_ctrl_c = 0;
+        py86_ctrl_c_flag = 1;
+    }
+    if (py86_console_input && ((py86_vm_branches & 255U) == 0U)) {
+        union REGS in_regs, out_regs;
+        memset(&in_regs, 0, sizeof(in_regs));
+        in_regs.h.ah = 0x01;
+        int86(0x16, &in_regs, &out_regs);
+        if (!(out_regs.x.flags & 0x40) && out_regs.h.al == 3) {
+            memset(&in_regs, 0, sizeof(in_regs));
+            in_regs.h.ah = 0;
+            int86(0x16, &in_regs, &out_regs);
+            py86_ctrl_c_flag = 1;
+        }
+    }
+    if (py86_ctrl_c_flag) {
+        py86_ctrl_c_flag = 0;
+        mp_sched_keyboard_interrupt();
+    }
+}
 
 /* CPython-style convenience functions: both signal SystemExit.
  * This is a C builtin, so it also works when no Python stdlib is installed. */
@@ -141,6 +190,9 @@ int main(int argc, char **argv) {
     if (!heap) { fputs("Cannot allocate 48000-byte Python heap\n", stderr); return 2; }
     gc_init(heap, (char *)heap + 48000U);
     mp_init();
+    py86_console_input = isatty(0);
+    py86_test_ctrl_c = getenv("PY86_TEST_CTRLC") != NULL;
+    signal(SIGINT, py86_sigint);
     /* Keep ordinary cls behavior by default. --home-cls is useful for
        fixed-width full-frame text apps such as the unchanged PythonClock. */
     if (argc > 1 && strcmp(argv[1], "--home-cls") == 0) {
@@ -161,7 +213,20 @@ int main(int argc, char **argv) {
         for (;;) {
             source[0] = 0;
             fputs(">>> ", stdout); fflush(stdout);
-            if (!fgets(line, sizeof(line), stdin)) break;
+            if (!fgets(line, sizeof(line), stdin)) {
+                if (py86_ctrl_c_flag) {
+                    py86_ctrl_c_flag = 0;
+                    clearerr(stdin);
+                    puts("KeyboardInterrupt");
+                    continue;
+                }
+                break;
+            }
+            if ((unsigned char)line[0] == 3 || py86_ctrl_c_flag) {
+                py86_ctrl_c_flag = 0;
+                puts("KeyboardInterrupt");
+                continue;
+            }
             line[strcspn(line, "\r\n")] = 0;
             strcpy(source, line);
             while (mp_repl_continue_with_input(source)) {
@@ -183,6 +248,7 @@ int main(int argc, char **argv) {
             }
         }
     }
+    signal(SIGINT, SIG_DFL);
     mp_deinit();
     free(heap);
     return result;

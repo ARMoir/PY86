@@ -24,6 +24,14 @@ py86 LOOKUP.PY > LOOKUP.OUT
 if errorlevel 1 goto fail
 py86 STRHASH.PY > STRHASH.OUT
 if errorlevel 1 goto fail
+py86 HELP.PY > HELP.OUT
+if errorlevel 1 goto fail
+set PY86_TEST_CTRLC=1
+py86 CTRLC.PY > CTRLC.OUT
+if errorlevel 1 goto fail
+py86 CTRLSLP.PY > CTRLSLP.OUT
+if errorlevel 1 goto fail
+set PY86_TEST_CTRLC=
 py86 ERROR.PY > ERROR.OUT
 if not errorlevel 1 goto fail
 

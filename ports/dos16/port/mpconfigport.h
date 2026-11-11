@@ -53,7 +53,18 @@
 #define MICROPY_PY_BUILTINS_COMPLEX (1)
 #define MICROPY_PY_BUILTINS_STR_UNICODE (1)
 #define MICROPY_PY_BUILTINS_INPUT (1)
-#define MICROPY_PY_BUILTINS_HELP (0)
+#define MICROPY_PY_BUILTINS_HELP (1)
+#define MICROPY_PY_BUILTINS_HELP_TEXT \
+    "Py86: Python 3 for 16-bit DOS (MicroPython 1.24.1)\\n" \
+    "Commands: help(), help(obj), exit(), quit(), input(), print()\\n" \
+    "Modules: os, sys, time, datetime, math, random, json, re, hashlib, gc, errno\\n" \
+    "Run: PY86 SCRIPT.PY, PY86 -c \\"print(123)\\", or PY86 for >>>\\n" \
+    "Ctrl+C interrupts a running program; Ctrl+Z then Enter exits REPL.\\n" \
+    "For built-in object information, use help(obj).\\n"
+#define MICROPY_PY_BUILTINS_HELP_MODULES (0)
+#define MICROPY_KBD_EXCEPTION (1)
+#define MICROPY_VM_HOOK_LOOP py86_vm_hook_loop();
+void py86_vm_hook_loop(void);
 #define MICROPY_PY_SYS (1)
 #define MICROPY_PY_SYS_PATH (1)
 #define MICROPY_PY_SYS_ARGV (1)

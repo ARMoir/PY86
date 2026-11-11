@@ -218,6 +218,11 @@ static void py86_wait_ticks(unsigned long ticks) {
     do {
         current = py86_bios_ticks();
         elapsed = current >= start ? current - start : PY86_TICKS_PER_DAY - start + current;
+        /* Allow Ctrl+C even inside the DOS BIOS-timer sleep busy-loop. */
+        if ((elapsed & 1UL) == 0UL) {
+            py86_vm_hook_loop();
+            mp_handle_pending(true);
+        }
     } while (elapsed < ticks);
 }
 

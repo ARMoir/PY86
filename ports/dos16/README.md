@@ -494,3 +494,23 @@ exposes the Py86 host function in MicroPython's existing builtins table.
 Note: Every DOSBox test script must have a DOS 8.3 filename. The runner
 validates flat test files and refuses long names instead of letting DOS
 silently truncate them (for example `EXCATCH.PY`, not `EXITCATCH.PY`).
+
+
+## Keyboard interrupt and built-in help
+
+The native DOS host now polls BIOS keyboard input using INT 16h only when
+stdin is a console and only once per 256 VM branches. A Ctrl+C key is consumed
+and turned into a MicroPython `KeyboardInterrupt` at the VM pending-exception
+check. Ordinary keyboard input is left in the BIOS buffer. The DOS SIGINT
+handler only sets a flag, with all Python exception handling deferred to a safe
+VM boundary. The DOS BIOS-timer `time.sleep()` loop also checks for pending
+interrupts. Ctrl+C is expected to recover to the REPL or be catchable in a
+Python `try/except KeyboardInterrupt` block. Existing Ctrl+Z, Enter for DOS
+REPL exit remains available. Redirected stdin is not polled through BIOS.
+
+`help()` uses MicroPython's native help implementation with a Py86-specific
+small welcome message and `help(obj)` support, compiled into the executable.
+The DOSBox integration tests cover `help()`, `help(list)`, and a deterministic
+pending-keyboard-interrupt injection during an infinite loop and BIOS sleep
+(using the test-only `PY86_TEST_CTRLC` DOS environment variable). They do not
+substitute for a physical keyboard Ctrl+C test on the actual Tandy V20.
