@@ -100,9 +100,14 @@ static mp_obj_t py86_file_enter(mp_obj_t self_in) {
 static MP_DEFINE_CONST_FUN_OBJ_1(py86_file_enter_obj, py86_file_enter);
 
 static void py86_file_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest) {
-    if (dest[0] == MP_OBJ_NULL && attr == MP_QSTR_closed) {
+    if (dest[0] != MP_OBJ_NULL) return;
+    if (attr == MP_QSTR_closed) {
         py86_file_t *self = MP_OBJ_TO_PTR(self_in);
         dest[0] = mp_obj_new_bool(self->fp == NULL);
+    } else {
+        /* Let MicroPython continue searching the type's locals_dict for
+         * normal methods such as __exit__, read, write, and close. */
+        dest[1] = MP_OBJ_SENTINEL;
     }
 }
 
