@@ -159,7 +159,8 @@ The original PythonClock invokes `os.system("cls")` after displaying each
 frame. On a 7 MHz 8086/V20-class machine, recomputing the next frame can
 take multiple seconds, leaving the screen blank after an ordinary clear.
 
-Use **`RUNCLK.BAT`**, which starts `PY86 --home-cls CLOCK.PY`. In this
+Use **`RUNCLK.BAT`**, which clears the DOS screen once (`CLS`) and then
+starts `PY86 --home-cls CLOCK.PY`. In this
 opt-in mode, `os.system("cls")` homes the BIOS text cursor to row 0, column 0
 **without clearing the previous clock**. The next full-sized frame overwrites
 the old one; the five original PythonClock source files remain unchanged.

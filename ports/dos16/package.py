@@ -41,7 +41,7 @@ README = (
     "Experimental interpreter, based on MicroPython 1.24.1.\r\n"
     "Not a complete implementation of CPython 3.x.\r\n"
 )
-RUNCLK = "@echo off\r\nPY86 --home-cls CLOCK.PY\r\n"
+RUNCLK = "@echo off\r\ncls\r\nPY86 --home-cls CLOCK.PY\r\n"
 
 def main():
     missing = [str(src) for src in INPUTS.values() if not src.is_file()]
