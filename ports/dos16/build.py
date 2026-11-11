@@ -8,6 +8,7 @@ import re
 import subprocess
 import sys
 import shutil
+from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor
 
 ROOT = Path(__file__).resolve().parent
@@ -31,6 +32,16 @@ wat = args.watcom.resolve()
 build = ROOT / 'build'
 gen = build / 'genhdr'
 gen.mkdir(parents=True, exist_ok=True)
+# Each release build stamps the exact version into the native 16-bit program.
+# Local builds default to an explicitly unreleased .0 development number.
+version = os.environ.get('PY86_VERSION') or datetime.now(timezone.utc).strftime('0.%y.%m.0')
+if not re.fullmatch(r'0\.\d{2}\.(?:0[1-9]|1[0-2])\.\d+', version):
+    raise SystemExit('PY86_VERSION must be 0.YY.MM.increment (e.g. 0.26.11.42)')
+(build / 'py86-version.h').write_text(
+    '#ifndef PY86_VERSION\n#define PY86_VERSION "' + version + '"\n#endif\n',
+    encoding='ascii')
+(build / 'py86-version.txt').write_text(version + '\n', encoding='ascii')
+print('Py86 version:', version, flush=True)
 env = dict(os.environ, WATCOM=str(wat), INCLUDE=str(wat / 'h'))
 toolbin = wat / ('binnt64' if os.name == 'nt' else 'binl64')
 exesuffix = '.exe' if os.name == 'nt' else ''

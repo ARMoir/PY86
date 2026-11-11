@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parent
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--dosbox", required=True)
+    p.add_argument("--emulator", choices=("classic", "staging"), default="classic")
     p.add_argument("--mode", default="baseline")
     p.add_argument("--timeout", type=int, default=220)
     p.add_argument("--vm-tests", action="store_true", help="Include dispatch microbenchmarks")
@@ -62,10 +63,12 @@ def main():
         (stage / name).unlink(missing_ok=True)
 
     conf = build / "bench-dosbox.conf"
+    video = ("[sdl]\nfullscreen=false\n" if args.emulator == "staging"
+             else "[sdl]\nfullscreen=false\noutput=surface\n")
+    cpu = ("core=normal\ncpu_cycles=20000\n" if args.emulator == "staging"
+           else "core=normal\ncputype=8086\ncycles=fixed 20000\n")
     conf.write_text(
-        "[sdl]\nfullscreen=false\noutput=surface\n"
-        "[dosbox]\nmemsize=1\n"
-        "[cpu]\ncore=normal\ncputype=8086\ncycles=fixed 20000\n"
+        video + "[dosbox]\nmemsize=1\n[cpu]\n" + cpu +
         '[autoexec]\nmount c "' + str(stage) + '"\nc:\ncall BENCH.BAT\nexit\n'
     )
     opts = {}
@@ -76,7 +79,9 @@ def main():
         opts["startupinfo"] = startup
     with (build / "bench-emulator.log").open("w") as log:
         subprocess.run(
-            [args.dosbox, "-conf", str(conf), "-noconsole"],
+            ([args.dosbox, "--conf", str(conf), "--noprimaryconf", "--nolocalconf"]
+             if args.emulator == "staging" else
+             [args.dosbox, "-conf", str(conf), "-noconsole"]),
             timeout=args.timeout, stdout=log, stderr=log, **opts,
         )
 
@@ -143,7 +148,9 @@ def main():
         raise SystemExit("Requested heap size was not selected")
     report = {
         "mode": args.mode,
-        "environment": "DOSBox 0.74, 8086, fixed 20000 cycles, BIOS ~55ms tick",
+        "environment": ("DOSBox Staging real-mode 20000 cycles, BIOS ~55ms tick"
+                        if args.emulator == "staging" else
+                        "DOSBox 0.74, 8086, fixed 20000 cycles, BIOS ~55ms tick"),
         "disclaimer": "Relative DOSBox results, not physical V20 clock speed",
         "executable_bytes": (build / "py86.exe").stat().st_size,
         "heap_request": args.heap,

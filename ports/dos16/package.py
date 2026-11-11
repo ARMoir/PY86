@@ -22,8 +22,9 @@ INPUTS = {
     "second.py": ROOT / "tests" / "pythonclock" / "second.py",
 }
 
+VERSION = (ROOT / "build" / "py86-version.txt").read_text(encoding="ascii").strip()
 README = (
-    "Py86 0.1: Python 3 for 16-bit DOS\r\n"
+    f"Py86 {VERSION}: Python 3 for 16-bit DOS\r\n"
     "PythonClock (original source) is included.\r\n"
     "\r\n"
     "Copy all files to the same directory on your DOS drive.\r\n"

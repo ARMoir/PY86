@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write  # Required to create a release tag and upload the versioned ZIP.
 
 jobs:
   package:
@@ -25,6 +25,15 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
+      - name: Stamp an increasing release version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="0.$(date -u +'%y.%m').$GITHUB_RUN_NUMBER"
+          echo "PY86_VERSION=$version" >> "$GITHUB_ENV"
+          echo "PY86_TAG=v$version" >> "$GITHUB_ENV"
+          echo "Building Py86 $version"
 
       - name: Check Py86 build and test script syntax
         shell: bash
@@ -68,25 +77,51 @@ jobs:
             --source "$RUNNER_TEMP/micropython-1.24.1" \
             --watcom "$RUNNER_TEMP/watcom"
 
-      # Headless 8086 DOSBox executes the actual DOS EXE, not host Python.
-      - name: Install DOSBox for 16-bit runtime tests
-        shell: bash
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends dosbox xvfb xauth
-
-      - name: Run DOSBox 8086 integration suite
+      # Use the same pinned portable DOSBox Staging binary that succeeded for
+      # py86pkg Roman tests; avoid intermittent Ubuntu apt mirror DNS failures.
+      - name: Download pinned DOSBox Staging for runtime tests
         shell: bash
         run: |
           set -euo pipefail
-          xvfb-run -a python ports/dos16/run_dos.py \
-            --dosbox "$(command -v dosbox)" --timeout 300
+          curl --fail --location --retry 3 --retry-delay 4 \
+            'https://github.com/dosbox-staging/dosbox-staging/releases/download/v0.83.0/dosbox-staging-linux-x86_64-v0.83.0.tar.xz' \
+            --output "$RUNNER_TEMP/dosbox-staging.tar.xz"
+          echo 'd3a94f7f1c3e68a47ec88d61145506c7904452adb0c9c5928cb8cfe2331d6c5c  '"$RUNNER_TEMP/dosbox-staging.tar.xz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/dosbox-staging"
+          tar -xJf "$RUNNER_TEMP/dosbox-staging.tar.xz" -C "$RUNNER_TEMP/dosbox-staging"
+          exe="$(find "$RUNNER_TEMP/dosbox-staging" -type f -name dosbox -print -quit)"
+          test -n "$exe"
+          chmod +x "$exe"
+          echo "DOSBOX_STAGING=$exe" >> "$GITHUB_ENV"
+          "$exe" --version
 
-      - name: Measure production Py86 performance (DOSBox fixed CPU setting)
+      - name: Run actual Py86 16-bit integration suite in DOSBox Staging
         shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
         run: |
-          xvfb-run -a python ports/dos16/run_bench.py \
-            --dosbox "$(command -v dosbox)" --mode production-strings --timeout 240
+          set -euo pipefail
+          python ports/dos16/run_dos.py \
+            --dosbox "$DOSBOX_STAGING" --emulator staging --timeout 300
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          data = json.loads(Path('ports/dos16/build/test-results.json').read_text())
+          assert data['version'] == os.environ['PY86_VERSION'], data
+          assert data['batch_result'] == 'PASS', data
+          print('PASS release version and DOSBox tests:', data['version'])
+          PY
+
+      - name: Measure production Py86 performance (DOSBox Staging)
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          python ports/dos16/run_bench.py \
+            --dosbox "$DOSBOX_STAGING" --emulator staging \
+            --mode production-strings --timeout 240
 
       - name: Upload production performance measurements
         uses: actions/upload-artifact@v4
@@ -115,8 +150,8 @@ jobs:
         run: |
           python ports/dos16/package.py
 
-      # GitHub automatically downloads an artifact named PY86 as PY86.zip.
-      # Upload flat files, not the standalone zip, to avoid a double-zipped file.
+      # Retain the old Actions artifact name for existing users.
+      # Releases publish the standalone ZIP produced by package.py.
       - name: Publish PY86.zip
         uses: actions/upload-artifact@v4
         with:
@@ -125,3 +160,34 @@ jobs:
           if-no-files-found: error
           retention-days: 30
           compression-level: 6
+
+      - name: Create a versioned, downloadable release ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp ports/dos16/dist/PY86.zip "ports/dos16/dist/PY86-${PY86_VERSION}.zip"
+          unzip -t "ports/dos16/dist/PY86-${PY86_VERSION}.zip"
+          test -f ports/dos16/dist/PY86/PY86.EXE
+
+      - name: Publish GitHub Release for this successful build
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/RELEASE_NOTES.md" <<EOF
+          Automated Py86 16-bit DOS release **${PY86_VERSION}**.
+
+          - Built from commit \`${GITHUB_SHA}\` on branch \`${GITHUB_REF_NAME}\`.
+          - Source: MicroPython 1.24.1 with Py86 DOS compatibility patches.
+          - Includes PY86.EXE, the original PythonClock sources and RUNCLK.BAT.
+          - The packaged executable prints \`Py86 ${PY86_VERSION}\` with \`PY86 --version\`.
+          - The full real-mode DOSBox Staging integration suite passed.
+          - DOSBox Staging is not a cycle-accurate 8086 or a real Tandy V20 test.
+
+          Extract the versioned ZIP into one directory on your DOS/CF card.
+          Run \`PY86 -V\` to check the version and \`RUNCLK\` for PythonClock.
+          EOF
+          gh release create "$PY86_TAG" "ports/dos16/dist/PY86-${PY86_VERSION}.zip" \
+            --title "Py86 ${PY86_VERSION}" --notes-file "$RUNNER_TEMP/RELEASE_NOTES.md" \
+            --target "$GITHUB_SHA" --latest

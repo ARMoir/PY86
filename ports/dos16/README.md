@@ -199,12 +199,43 @@ The ZIP has everything at its root (no extra directory or nested ZIP):
 - `README.TXT` (DOS startup instructions)
 
 Extract these files into one folder on the DOS/CF drive, then run `RUNCLK`
-(or `PY86 CLOCK.PY`). The Actions workflow produces a package **artifact only**
-(no release publishing, deployment, or automatic firmware/CF image writing).
-Before publishing the ZIP, the GitHub Actions job now runs the DOSBox 8086
-integration suite, including the clock and module tests. This is an emulator
-check, not proof of compatibility with every physical DOS machine.
+(or `PY86 CLOCK.PY`). The main build workflow retains the **PY86** Actions
+artifact for compatibility. It also publishes a **versioned GitHub Release**
+after its interpreter build, DOSBox tests, and packaging succeed. A release
+contains the standalone, flat `PY86-<version>.zip` archive.
+DOSBox Staging checks the actual 16-bit executable, but is not an exact
+8086 CPU simulation or a substitute for testing on a physical V20.
 
+
+## Automatic build versions and GitHub Releases
+
+Every successful run of the main
+[Py86 DOS + PythonClock package](../../.github/workflows/py86-package.yml)
+workflow (branch push or manual dispatch) creates a GitHub
+[Release](https://github.com/ARMoir/micropython/releases) with a
+downloadable DOS-ready ZIP.
+
+Versions use **`0.YY.MM.N`**, for example `0.26.11.42`:
+
+- `YY` and `MM` are the UTC year and month of the build.
+- `N` is the increasing GitHub Actions run number for the main workflow.
+  It never resets at the start of a month, preventing duplicate tags.
+- The tag is `v0.YY.MM.N` and the attached file is `PY86-0.YY.MM.N.zip`.
+- `PY86 -V`, `PY86 --version`, the interactive startup banner, and the
+  included `README.TXT` report the **same version embedded at compile time**.
+- A manual/local build without `PY86_VERSION` is marked with a development
+  suffix `.0`, using the local UTC year/month. To specify a local build
+  number, set the `PY86_VERSION` environment variable before `build.py`.
+
+The main build validates the DOS executable, runs the complete DOSBox
+Staging test suite and benchmarks, and only then publishes the Release.
+Failed builds do not create releases. The existing Actions `PY86` artifact
+remains available. The converter workflow (`py86pkg`) is **paused for
+automatic triggers** and can still be run manually from Actions.
+
+**Installation:** download the newest versioned ZIP from Releases, extract
+the files together to a DOS/CF card, and run `PY86 -V` to confirm the
+embedded version. `RUNCLK` starts the bundled unchanged PythonClock.
 
 ## Flicker-free clock redraw on slow DOS hardware
 

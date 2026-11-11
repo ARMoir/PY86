@@ -8,8 +8,10 @@ import json
 root = Path(__file__).resolve().parent
 p = argparse.ArgumentParser()
 p.add_argument('--dosbox', required=True)
+p.add_argument('--emulator', choices=('classic', 'staging'), default='classic')
 p.add_argument('--timeout', type=int, default=120)
 a = p.parse_args()
+version = (root / 'build' / 'py86-version.txt').read_text(encoding='ascii').strip()
 stage = root / 'dos-test'
 stage.mkdir(exist_ok=True)
 for f in (root / 'tests').iterdir():
@@ -38,8 +40,11 @@ for f in stage.glob('*.OUT'):
     f.unlink()
 (stage / 'RESULT.TXT').unlink(missing_ok=True)
 conf = root / 'build/dosbox.conf'
-conf.write_text('[sdl]\nfullscreen=false\noutput=surface\n[dosbox]\nmemsize=1\n'
-                '[cpu]\ncore=normal\ncputype=8086\ncycles=fixed 20000\n'
+video = ('[sdl]\nfullscreen=false\n' if a.emulator == 'staging'
+         else '[sdl]\nfullscreen=false\noutput=surface\n')
+cpu = ('core=normal\ncpu_cycles=20000\n' if a.emulator == 'staging'
+       else 'core=normal\ncputype=8086\ncycles=fixed 20000\n')
+conf.write_text(video + '[dosbox]\nmemsize=1\n[cpu]\n' + cpu +
                 '[autoexec]\nmount c "' + str(stage) + '"\nc:\ncall RUN.BAT\nexit\n')
 runner_opts = {}
 if os.name == 'nt':
@@ -48,7 +53,9 @@ if os.name == 'nt':
     startup.wShowWindow = 0
     runner_opts['startupinfo'] = startup
 with (root / 'build/emulator.log').open('w') as log:
-    subprocess.run([a.dosbox, '-conf', str(conf), '-noconsole'], timeout=a.timeout,
+    subprocess.run(([a.dosbox, '--conf', str(conf), '--noprimaryconf', '--nolocalconf']
+                    if a.emulator == 'staging' else
+                    [a.dosbox, '-conf', str(conf), '-noconsole']), timeout=a.timeout,
                    stdout=log, stderr=log, **runner_opts)
 result = (stage / 'RESULT.TXT').read_text().strip() if (stage / 'RESULT.TXT').exists() else 'NO RESULT'
 logs = {f.name: f.read_text(errors='replace') for f in stage.glob('*.OUT')}
@@ -71,8 +78,8 @@ required = {'SMOKE.OUT': ['PASS smoke'], 'METHOD.OUT': ['PASS methods'],
             'CARGS.OUT': ['PASS command_argv'],
             'CLIHELP.OUT': ['Usage: PY86', 'Ctrl+C'],
             'HELPFLAG.OUT': ['Usage: PY86'],
-            'VERSION.OUT': ['Py86 0.1', 'MicroPython 1.24.1'],
-            'VERNAME.OUT': ['Py86 0.1', 'MicroPython 1.24.1'],
+            'VERSION.OUT': ['Py86 ' + version, 'MicroPython 1.24.1'],
+            'VERNAME.OUT': ['Py86 ' + version, 'MicroPython 1.24.1'],
             'CTRLC.OUT': ['PASS ctrlc_keyboard_interrupt'],
             'CTRLSLP.OUT': ['PASS ctrlc_sleep_interrupt'],
             'CLOCK.OUT': ['   ~-------------~'],
@@ -84,7 +91,7 @@ required = {'SMOKE.OUT': ['PASS smoke'], 'METHOD.OUT': ['PASS methods'],
             'MEM60.OUT': ['heap_bytes=60000', 'mode=fixed'],
             'MEMCAP.OUT': ['heap_bytes=32000', 'mode=auto'],
             'INPUT.OUT': ['PASS input'],
-            'REPL.OUT': ['Py86 0.1', '>>> 3', '42', 'PASS repl_recovery', 'ValueError: repl recovery'],
+            'REPL.OUT': ['Py86 ' + version, '>>> 3', '42', 'PASS repl_recovery', 'ValueError: repl recovery'],
             'ERROR.OUT': ['ValueError: intentional exit-code test'],
             'EXCATCH.OUT': ['PASS exit_can_be_caught'],
             'EXIT0.OUT': ['PASS exit0_before'],
@@ -121,7 +128,8 @@ if logs.get('CLOCK.OUT', '').count('~-------------~') < 2:
 unexpected = [f for f, content in logs.items()
               if ('Traceback' in content and f not in ('REPL.OUT', 'ERROR.OUT'))
               or (f == 'REPL.OUT' and any(x in content for x in ('SyntaxError', 'IndentationError', 'NameError')))]
-report = {'environment': 'DOSBox built-in DOS; not DOS 6.22 or physical V20',
+report = {'environment': 'DOSBox ' + a.emulator + ' built-in DOS; not physical V20',
+          'version': version,
           'batch_result': result, 'missing': missing, 'unexpected_errors': unexpected, 'logs': logs}
 (root / 'build/test-results.json').write_text(json.dumps(report, indent=2))
 print(json.dumps(report, indent=2))

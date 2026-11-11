@@ -17,6 +17,7 @@
 #include "py/mperrno.h"
 #include "py/objlist.h"
 #include "py/builtin.h"
+#include "py86-version.h"
 
 /* From moddostime.c: opt-in cursor-home behavior for interactive redraws. */
 extern void py86_set_home_cls(int enabled);
@@ -326,7 +327,7 @@ int main(int argc, char **argv) {
     if (argc > first_arg &&
         (strcmp(argv[first_arg], "-V") == 0 ||
          strcmp(argv[first_arg], "--version") == 0)) {
-        puts("Py86 0.1 (MicroPython 1.24.1, 16-bit DOS, 8086/V20)");
+        puts("Py86 " PY86_VERSION " (MicroPython 1.24.1, 16-bit DOS, 8086/V20)");
         goto done;
     }
     if (argc > first_arg && strcmp(argv[first_arg], "-c") == 0) {
@@ -348,7 +349,7 @@ int main(int argc, char **argv) {
     } else {
         mp_obj_list_append(mp_sys_path, MP_OBJ_NEW_QSTR(MP_QSTR_));
         mp_obj_list_append(mp_sys_argv, mp_obj_new_str("", 0));
-        puts("Py86 0.1 (experimental) - Python 3 for 16-bit DOS");
+        puts("Py86 " PY86_VERSION " (experimental) - Python 3 for 16-bit DOS");
         puts("Based on MicroPython 1.24.1");
         puts("Blank line ends a block; Ctrl-Z then Enter exits.");
         for (;;) {

@@ -1,16 +1,8 @@
-name: py86pkg host converter checks
+name: py86pkg host converter checks (manual only)
 
+# Paused: no automatic converter builds. Keep manual dispatch available
+# for a deliberate test; restore push/PR triggers when development resumes.
 on:
-  push:
-    branches:
-      - tandypy-dos16-port
-    paths:
-      - 'tools/py86pkg/**'
-      - '.github/workflows/py86pkg.yml'
-  pull_request:
-    paths:
-      - 'tools/py86pkg/**'
-      - '.github/workflows/py86pkg.yml'
   workflow_dispatch:
 
 concurrency:
