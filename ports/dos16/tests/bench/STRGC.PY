@@ -11,6 +11,7 @@ from minute import setminute
 from second import setsecond
 
 threshold = int(sys.argv[1]) if len(sys.argv) > 1 else -1
+phase = sys.argv[2] if len(sys.argv) > 2 else "concat_chars"
 gc.threshold(threshold)
 frame = setface()
 chars = [ch for ch in frame]
@@ -54,7 +55,9 @@ def clock_case(count):
     return total
 
 def measure(name, func, count):
-    for trial in range(3):
+    # The clock process is run three times by the DOS batch driver so it
+    # cannot inherit temporary heap retention from the concatenation tests.
+    for trial in range(1 if name == "clock_frame" else 3):
         gc.collect()
         before = gc.mem_free()
         begin = time.ticks_ms()
@@ -68,8 +71,14 @@ def measure(name, func, count):
         print("PROFILE", name, trial, count, elapsed, before, during, after, gc_ms, check)
 
 print("CONFIG", threshold, gc.threshold(), gc.mem_free(), gc.mem_alloc())
-measure("split_chars", split_case, 5)
-measure("concat_chars", concat_case, 3)
-measure("join_chars", join_case, 10)
-measure("clock_frame", clock_case, 2)
-print("PASS strgc")
+if phase == "split_chars":
+    measure("split_chars", split_case, 5)
+elif phase == "concat_chars":
+    measure("concat_chars", concat_case, 3)
+elif phase == "join_chars":
+    measure("join_chars", join_case, 10)
+elif phase == "clock_frame":
+    measure("clock_frame", clock_case, 2)
+else:
+    raise ValueError("Unknown profile phase")
+print("PASS strgc", phase)

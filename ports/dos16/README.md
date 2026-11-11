@@ -352,3 +352,13 @@ experimental cache must not become the default without runtime correctness
 testing and a measurable improvement. All timings are DOSBox 8086
 `cycles=fixed 20000`, quantized to roughly 55 ms by BIOS ticks; they are
 not physical V20 benchmarks.
+
+
+**Profiling isolation:** The first full-in-one-process run hit the 48 KB
+heap after repeated concatenation (though all original interpreter and
+module tests passed). The profile now runs split/concat/join and the three
+clock-frame samples in separate Py86 interpreter processes per GC threshold.
+It still records three consecutive concatenation trials within one process,
+including reclaimed memory, to expose heap retention without contaminating
+the subsequent clock benchmark. This changes the benchmark harness only, not
+the PythonClock sources or production interpreter.

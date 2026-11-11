@@ -30,8 +30,14 @@ def main():
     bat = ["@echo off"]
     for idx, threshold in enumerate(THRESHOLDS):
         (stage / ("S%d.OUT" % idx)).unlink(missing_ok=True)
-        bat += ["PY86 STRGC.PY %d > S%d.OUT" % (threshold, idx),
-                "if errorlevel 1 goto fail"]
+        # Independent interpreter processes avoid 48 KB GC heap retention
+        # from concatenation affecting the PythonClock measurement.
+        for phase in ("split_chars", "concat_chars", "join_chars",
+                      "clock_frame", "clock_frame", "clock_frame"):
+            redir = ">" if phase == "split_chars" else ">>"
+            bat += ["PY86 STRGC.PY %d %s %s S%d.OUT" %
+                    (threshold, phase, redir, idx),
+                    "if errorlevel 1 goto fail"]
     bat += ["echo PASS > STRGC.RES", "goto end", ":fail",
             "echo FAIL > STRGC.RES", ":end"]
     (stage / "STRGC.RES").unlink(missing_ok=True)
@@ -58,7 +64,7 @@ def main():
     for idx, threshold in enumerate(THRESHOLDS):
         content = (stage / ("S%d.OUT" % idx)).read_text(errors="replace")
         raw[threshold] = content
-        if "PASS strgc" not in content or "Traceback" in content:
+        if content.count("PASS strgc") != 6 or "Traceback" in content:
             raise SystemExit("Failed threshold %d:\n%s" % (threshold, content))
         entries = {}
         for line in content.splitlines():
