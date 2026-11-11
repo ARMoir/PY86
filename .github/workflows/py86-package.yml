@@ -23,6 +23,15 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Check Py86 build and test script syntax
+        shell: bash
+        run: |
+          python -m py_compile \
+            ports/dos16/build.py \
+            ports/dos16/prepare_source.py \
+            ports/dos16/package.py \
+            ports/dos16/run_dos.py
+
       - name: Get pinned MicroPython 1.24.1 source
         shell: bash
         run: |
