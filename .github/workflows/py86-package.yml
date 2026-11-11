@@ -5,6 +5,9 @@ on:
     branches:
       - tandypy-dos16-port
       - master
+    paths-ignore:
+      - 'tools/py86pkg/**'
+      - '.github/workflows/py86pkg.yml'
   workflow_dispatch:
 
 permissions:

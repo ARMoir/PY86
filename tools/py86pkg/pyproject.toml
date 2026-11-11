@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "py86pkg"
+version = "0.1.0"
+description = "Standalone host-side PyPI source converter for experimental Py86 on DOS"
+requires-python = ">=3.10"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [{name = "Py86 contributors"}]
+dependencies = []
+
+[project.scripts]
+py86pkg = "py86pkg:main"
+
+[tool.setuptools]
+py-modules = ["py86pkg"]
+
+[tool.setuptools.data-files]
+"share/py86pkg/profiles" = ["profiles/v20.json"]

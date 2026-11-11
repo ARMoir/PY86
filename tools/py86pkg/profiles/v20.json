@@ -1,0 +1,10 @@
+{
+  "name": "PY86 DOS 16-bit, 8086/NEC V20",
+  "runtime": "MicroPython 1.24.1 DOS port",
+  "max_source_bytes": 24000,
+  "heap_mode": "automatic (build dependent)",
+  "conservative_heap_bytes": 48000,
+  "observed_auto_heap_bytes": 60000,
+  "dos_filename": "8.3",
+  "notes": "Heap availability varies with executable and free DOS memory. Values are guidance, not package acceptance tests."
+}
