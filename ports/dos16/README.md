@@ -202,12 +202,15 @@ In the **Actions** tab, open the latest **Py86 DOS + PythonClock package** run
 and download the **PY86** artifact. GitHub downloads it as **PY86.zip**.
 The ZIP has everything at its root (no extra directory or nested ZIP):
 
-- `PY86.EXE` (newly compiled 16-bit DOS interpreter)
+- `PY86.EXE` (standard 16-bit DOS interpreter, preserved unchanged)
+- `PY86P.EXE` (8086-compatible compressed alternative, approximately 41% smaller)
 - `START86.EXE` (tiny DOS launcher for full child startup timing)
 - `CLOCK.PY` (optimized single-file derivative of the original PythonClock)
 - `DEMO.PY` (self-checking feature showcase and diagnostic logger)
 - `RUNCLK.BAT` (starts the optimized clock with flicker-reducing cursor home)
-- `RUNTEST.BAT` (uses START86 for startup timing; writes `PY86.LOG`)
+- `RUNTEST.BAT` (runs PY86 directly with no extra timing launcher)
+- `RUNPCLK.BAT` and `RUNPTEST.BAT` (try smaller compressed interpreter)
+- `RUNLOAD.BAT` (optional detailed startup measurements using START86)
 - `README.TXT` (DOS startup instructions)
 
 Extract these files into one folder on the DOS/CF drive, then run `RUNCLK`
@@ -277,6 +280,27 @@ programs; differing line lengths or stray output may leave old characters.
 The mode assumes a DOS BIOS-compatible text console.
 
 
+## Smaller executable alternative for 8086 / NEC V20
+
+The GitHub Release includes a **size-reduced `PY86P.EXE`** alongside the
+original `PY86.EXE`. It uses UPX's explicitly 8086-compatible DOS
+decompression stub (`--8086 -1`), shrinking the image from around **345 KB
+to 205 KB** while retaining all built-in modules. The packaging workflow
+verifies the compressed EXE against the *full* DOSBox test suite before
+publishing. The baseline EXE remains unchanged as the reliable default.
+
+On the Tandy's CF card, try `RUNPCLK` or `RUNPTEST` to launch
+`PY86P.EXE` directly, avoiding any extra launcher process. You can also run
+`PY86P -V` or `PY86P YOURFILE.PY`. The uncompressed `RUNCLK` and `RUNTEST`
+remain the normal launchers.
+
+**Tradeoff:** The packed EXE reduces disk I/O but must decompress using the
+V20 CPU. In DOSBox, an earlier tested packed build started roughly 0.27 s
+slower than the uncompressed original. The actual XT-IDE CF performance
+and available conventional memory may change that result. Try the packed
+version on the real machine before deciding to make it the default.
+A smaller file is not automatically a faster startup.
+
 ## Full feature showcase and persistent DOS test log
 
 The downloadable release includes **`DEMO.PY`** and **`RUNTEST.BAT`**
@@ -296,8 +320,10 @@ using the approximately **55 ms BIOS timer** and are printed onscreen and
 saved to `PY86.LOG`. The second figure includes source parsing, compilation
 and initial dispatch; the delta approximates those phases.
 
-The ZIP now includes **`START86.EXE`**, a tiny 8086-compatible DOS
-launcher. `RUNTEST.BAT` launches `PY86 DEMO.PY` through it. START86
+The ZIP also includes **`START86.EXE`**, an optional 8086-compatible DOS
+timing launcher. Normal `RUNTEST.BAT` starts PY86 directly to avoid extra
+DOS loader overhead. If you want a full startup measurement, run
+`RUNLOAD.BAT`, which launches `PY86 DEMO.PY` through START86. START86
 takes a BIOS timestamp **before DOS loads the PY86.EXE child**, passes it
 through the DOS environment, then waits for the child. PY86 exposes it through
 `time.launch_ms()`, measured at the start of the demo script, alongside

@@ -141,6 +141,7 @@ jobs:
           path: |
             ports/dos16/build/emulator.log
             ports/dos16/build/test-results.json
+            ports/dos16/build/packed-test-results.json
             ports/dos16/build/bench-emulator.log
             ports/dos16/bench-test/*.OUT
             ports/dos16/dos-test/*.OUT
@@ -149,7 +150,60 @@ jobs:
             ports/dos16/dos-test/ONECLK.OUT
             ports/dos16/dos-test/PY86.LOG
 
-      - name: Package optimized single-file clock, feature demo and runtime
+      - name: Get a pinned 8086-compatible DOS executable packer
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 \
+            'https://github.com/upx/upx/releases/download/v5.0.2/upx-5.0.2-amd64_linux.tar.xz' \
+            --output "$RUNNER_TEMP/upx.tar.xz"
+          echo 'ddc2654063fe4dc80d95b420788494e4db078ebb01a650692d623b5a9906e61e  '"$RUNNER_TEMP/upx.tar.xz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/upx"
+          tar -xJf "$RUNNER_TEMP/upx.tar.xz" -C "$RUNNER_TEMP/upx"
+          upx="$(find "$RUNNER_TEMP/upx" -type f -name upx -print -quit)"
+          test -x "$upx"
+          echo "UPX_EXE=$upx" >> "$GITHUB_ENV"
+
+      - name: Make optional small 8086-safe PY86P.EXE
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$UPX_EXE" --8086 -1 \
+            -o ports/dos16/build/py86p.exe ports/dos16/build/py86.exe
+          "$UPX_EXE" -t ports/dos16/build/py86p.exe
+          python - <<'PY'
+          from pathlib import Path
+          plain = Path('ports/dos16/build/py86.exe')
+          packed = Path('ports/dos16/build/py86p.exe')
+          assert packed.read_bytes()[:2] == b'MZ'
+          assert packed.stat().st_size < plain.stat().st_size
+          print('Plain PY86.EXE:', plain.stat().st_size, 'bytes')
+          print('Packed PY86P.EXE:', packed.stat().st_size, 'bytes')
+          PY
+
+      - name: Full DOSBox regression test of smaller packed interpreter
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          set -euo pipefail
+          cp ports/dos16/build/py86.exe "$RUNNER_TEMP/py86-original.exe"
+          trap 'cp "$RUNNER_TEMP/py86-original.exe" ports/dos16/build/py86.exe' EXIT
+          cp ports/dos16/build/py86p.exe ports/dos16/build/py86.exe
+          python ports/dos16/run_dos.py \
+            --dosbox "$DOSBOX_STAGING" --emulator staging --timeout 300 \
+            > "$RUNNER_TEMP/packed-test.log"
+          cp ports/dos16/build/test-results.json ports/dos16/build/packed-test-results.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          result = json.loads(Path('ports/dos16/build/packed-test-results.json').read_text())
+          assert result['batch_result'] == 'PASS' and not result['missing'] and not result['unexpected_errors']
+          print('PASS all DOSBox tests under compressed PY86P.EXE')
+          PY
+
+      - name: Package optimized single-file clock, feature demo and both interpreters
         shell: bash
         run: |
           python ports/dos16/package.py
@@ -184,7 +238,11 @@ jobs:
 
           - Built from commit \`${GITHUB_SHA}\` on branch \`${GITHUB_REF_NAME}\`.
           - Source: MicroPython 1.24.1 with Py86 DOS compatibility patches.
-          - Includes PY86.EXE, generated CLOCK.PY, DEMO.PY, RUNCLK.BAT and RUNTEST.BAT.
+          - Includes normal PY86.EXE and 8086-compatible UPX-packed PY86P.EXE (smaller optional alternative).
+          - RUNCLK / RUNTEST use original uncompressed interpreter directly.
+          - RUNPCLK / RUNPTEST launch the smaller compressed interpreter, verified by the full DOSBox suite.
+          - Real 7 MHz V20 load times may differ; compression is not guaranteed faster.
+          - Includes generated CLOCK.PY, DEMO.PY and startup batch files.
           - Original PythonClock sources remain unchanged in the repository.
           - RUNTEST showcases language features, built-in modules and DOS file I/O; it writes PY86.LOG.
           - The packaged executable prints \`Py86 ${PY86_VERSION}\` with \`PY86 --version\`.
