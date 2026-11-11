@@ -54,6 +54,59 @@ To exit the console under DOS, use Ctrl-Z followed by Enter. End a multi-line
 REPL block with a blank line. The source file path is resolved using DOS
 filesystem semantics.
 
+## Converting PyPI packages for Py86 (host-side `py86pkg`)
+
+The experimental **[py86pkg converter](../../tools/py86pkg/README.md)** lives
+in the same GitHub repository at [`tools/py86pkg/py86pkg.py`](../../tools/py86pkg/py86pkg.py).
+It runs with Python 3.10+ on a **modern PC**, not under MS-DOS. It is entirely
+separate from the 16-bit Py86 interpreter and does **not** change the
+`PY86.EXE` build, runtime performance, or DOS memory usage.
+
+From the **repository root** on the modern PC, convert a PyPI package by name
+or URL:
+
+```sh
+python tools/py86pkg/py86pkg.py convert https://pypi.org/project/roman/5.2/ --library-only --output ROMAN.ZIP
+# Or inspect a local source directory instead of downloading from PyPI:
+python tools/py86pkg/py86pkg.py convert --source path/to/library --output PY86PKG.ZIP
+```
+
+The converter downloads and verifies the source distribution, performs
+conservative source transformations (including stripping type annotations
+and lowering supported modern syntax), and writes a ZIP containing the
+converted Python files, `REPORT.JSON`, and `README.TXT`. **Always check the
+report**: exit code 0 means *no statically detected blockers*, not proven DOS
+compatibility; exit code 2 means some manual porting is still required.
+An individual source file must fit Py86's 24,000-byte loading limit, and
+DOS 8.3 filenames and runtime heap availability still matter.
+
+The pinned **roman 5.2** example uses `--library-only` because the package's
+`argparse`-based command-line interface is not supported by Py86. This mode
+omits the CLI entrypoints and emits a single DOS-compatible `ROMAN.PY`.
+Extract `ROMAN.PY` from `ROMAN.ZIP` onto the DOS/CF drive alongside
+`PY86.EXE`. Then try:
+
+```bat
+PY86 -c "import roman; print(roman.toRoman(2026))"
+REM Expected: MMXXVI
+PY86 -c "import roman; print(roman.fromRoman('XLII'))"
+REM Expected: 42
+```
+
+The [`py86pkg` GitHub Actions workflow](../../.github/workflows/py86pkg.yml)
+performs automated host-side converter tests **and** an end-to-end test that
+downloads roman 5.2 from PyPI, converts it, builds the real 16-bit `PY86.EXE`,
+and executes Roman numeral round-trip and validation tests in **DOSBox
+Staging**. The successful reference run is
+[GitHub Actions run 43040390458](https://github.com/ARMoir/micropython/actions/runs/43040390458).
+DOSBox success is not a substitute for testing on the physical Tandy V20.
+
+Other packages may require manual changes or may be impossible to use with
+current Py86 APIs, its memory limits, or native extension restrictions.
+The tool does not currently install and convert dependencies recursively.
+See the [converter documentation](../../tools/py86pkg/README.md) for its
+supported transformations, limitations, and command options.
+
 ## Demonstrated language features
 
 The bundled `tests/CORE.PY` covers integer division and modulo, big integers,
