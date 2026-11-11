@@ -6,7 +6,7 @@
 #include <sys/stat.h>
 #include <signal.h>
 #include <dos.h>
-#include <i86.h>
+#include <bios.h>
 #include <io.h>
 #include "py/compile.h"
 #include "py/runtime.h"
@@ -23,6 +23,15 @@ extern void py86_set_home_cls(int enabled);
 static char *stack_top;
 static void *heap;
 static int py86_exit_requested;
+
+/* Keyboard interrupt support: SIGINT is deferred to safe VM boundaries. */
+const char py86_help_text[] =
+    "Py86: Python 3 for 16-bit DOS (MicroPython 1.24.1)\n"
+    "Commands: help(), help(obj), exit(), quit(), input(), print()\n"
+    "Modules: os, sys, time, datetime, math, random, json, re, hashlib, gc, errno\n"
+    "Run: PY86 SCRIPT.PY or PY86 for the interactive prompt.\n"
+    "Ctrl+C interrupts a running program; Ctrl+Z then Enter exits the REPL.\n"
+    "For built-in object information, use help(obj).\n";
 
 /* Signal handler only records a flag; MicroPython exceptions are scheduled
  * later in the VM, never from an asynchronous DOS signal handler. */
@@ -52,14 +61,9 @@ void py86_vm_hook_loop(void) {
         py86_ctrl_c_flag = 1;
     }
     if (py86_console_input && ((py86_vm_branches & 255U) == 0U)) {
-        union REGS in_regs, out_regs;
-        memset(&in_regs, 0, sizeof(in_regs));
-        in_regs.h.ah = 0x01;
-        int86(0x16, &in_regs, &out_regs);
-        if (!(out_regs.x.flags & 0x40) && out_regs.h.al == 3) {
-            memset(&in_regs, 0, sizeof(in_regs));
-            in_regs.h.ah = 0;
-            int86(0x16, &in_regs, &out_regs);
+        unsigned short key = _bios_keybrd(_KEYBRD_READY);
+        if ((key & 0xff) == 3) {
+            (void)_bios_keybrd(_KEYBRD_READ);
             py86_ctrl_c_flag = 1;
         }
     }
