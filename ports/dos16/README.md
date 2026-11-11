@@ -548,11 +548,13 @@ complete `io` module compatibility are not yet implemented.
 `open()` file objects now implement `readinto(buffer)` using MicroPython's
 existing stream buffer protocol and `writelines(iterable)` using the existing
 DOS writer. Neither requires allocating a new Python string per operation.
-The optimized C `readline(size=-1)` and line iterator use buffered Watcom
-`fgetc` instead of per-byte generic MicroPython stream calls. All operations
-support text (DOS CRLF translation) and binary files. `readlines()` follows
-the optimized line routine. Use `build.py --file-readline-mode generic` to
-reproduce and benchmark the previous unbuffered implementation.
+An alternate C `readline(size=-1)` and native iterator use buffered
+Watcom `fgetc` instead of the generic MicroPython stream calls. The DOSBox
+A/B test found **no improvement for direct readline() and a 25% slowdown in
+the short file-iteration trial**, with only 55ms BIOS timer resolution.
+Therefore the **original generic MicroPython reader remains the production
+default**. Use `build.py --file-readline-mode fast` to experiment with the
+alternative reader; both pass the same text and binary tests.
 
 `help('modules')` lists compiled MicroPython/Py86 modules.
 `PY86 -h` / `--help` shows command usage; `PY86 -V` / `--version`

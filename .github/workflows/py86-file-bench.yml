@@ -1,9 +1,8 @@
 name: Py86 native readline A/B profile
 
+# Full native/generic comparison is manually dispatchable.
+# Normal pushes build and test the production reader.
 on:
-  push:
-    branches:
-      - tandypy-dos16-port
   workflow_dispatch:
 
 permissions:

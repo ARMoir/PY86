@@ -18,8 +18,8 @@ p.add_argument('--only', default='')
 p.add_argument('--string-mode', choices=('original', 'char-cache', 'lazy-hash', 'both'),
                default='both', help='String optimization (production default: both)')
 p.add_argument('--resume', action='store_true')
-p.add_argument('--file-readline-mode', choices=('generic', 'fast'), default='fast',
-               help='DOS file.readline implementation (default: fast)')
+p.add_argument('--file-readline-mode', choices=('generic', 'fast'), default='generic',
+               help='DOS file.readline implementation (default: generic; fast is experimental)')
 p.add_argument('--vm-mode', choices=('baseline', 'fast-decode', 'compiler', 'far128', 'near384', 'combined',
                                      'inline', 'intrinsic', 'loop', 'reopt'),
                default='baseline', help='8086 VM dispatch, compiler and near/far data experiment')

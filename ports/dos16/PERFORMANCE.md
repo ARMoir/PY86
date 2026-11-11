@@ -174,3 +174,31 @@ specific *cold* static tables as far rather than penalizing all object lookups
 with a blanket `-zt=128`. The comparison workflows remain manually
 dispatchable and upload linker maps for analysis. Validate on the physical
 V20 before changing the production default.
+
+
+## DOS file-line reading, readinto(), and CLI compatibility (2026-11-11)
+
+After adding native DOS-backed `readinto(buffer)` and `writelines(iterable)`,
+MicroPython's default generic `readline()` was compared against an optional
+C `fgetc` implementation. The [successful A/B DOSBox experiment](https://github.com/ARMoir/micropython/actions/runs/43019197338)
+built each configuration with otherwise identical settings, ran the entire
+8086 correctness suite, and measured three independent file-reading trials.
+
+| Benchmark | Generic ms/line | Native ms/line | Outcome |
+| --- | ---: | ---: | --- |
+| `file.readline()` | 0.6445 | 0.6445 | **No measurable improvement** |
+| `for line in file` | 0.6445 | 0.8594 | **Native ~25% lower throughput** |
+| `readinto()` (control) | 0.2109 | 0.0000 | Too short for 55ms timer; no meaningful inference |
+
+Generic executable was 342,028 bytes, alternative native 342,492 bytes.
+Those results were measured using DOSBox 8086 fixed 20,000 cycles, not the
+physical 7 MHz NEC V20; short trials are quantized to 55ms timer ticks.
+There is no evidence yet to promote the native reader, so the production
+build **retains the generic default**. Both modes are selectable with
+`--file-readline-mode generic|fast`; the expensive comparison workflow is
+manually dispatched. The new `readinto` and `writelines` APIs are available
+in both builds and passed DOSBox functional tests.
+
+Py86 also now enables `help('modules')`, adds `-h/--help`, `-V/--version`,
+and corrects `sys.argv` handling of `-c 'code' [args...]`. These changes
+are covered by DOSBox command-line, module-help, and script argument tests.
