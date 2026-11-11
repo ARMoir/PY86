@@ -94,6 +94,35 @@ jobs:
             ports/dos16/build/image-lab/speed-test.json \
             ports/dos16/build/image-lab/speed.json
 
+      - name: Compile small-code candidate without dead-code linker changes
+        id: size_build
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          python ports/dos16/build.py --source "$RUNNER_TEMP/micropython-1.24.1" \
+            --watcom "$RUNNER_TEMP/watcom" --image-mode size
+          cp ports/dos16/build/py86.exe ports/dos16/build/image-lab/PY86SIZE.EXE
+          python ports/dos16/image_size.py size ports/dos16/build/py86.exe \
+            ports/dos16/build/image-lab/size.json
+
+      - name: DOSBox test small-code executable
+        id: size_test
+        if: steps.size_build.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          set -euo pipefail
+          python ports/dos16/run_dos.py --dosbox "$DOSBOX_STAGING" \
+            --emulator staging --timeout 300 | tee ports/dos16/build/image-lab/size-test.log
+          cp ports/dos16/build/test-results.json ports/dos16/build/image-lab/size-test.json
+          python ports/dos16/image_size.py startup \
+            ports/dos16/build/image-lab/size-test.json \
+            ports/dos16/build/image-lab/size.json
+
       - name: Compile compact candidate with dead-code elimination
         id: compact_build
         continue-on-error: true
@@ -117,7 +146,7 @@ jobs:
         run: |
           set -euo pipefail
           python ports/dos16/run_dos.py --dosbox "$DOSBOX_STAGING" \
-            --emulator staging --timeout 300 > "$RUNNER_TEMP/compact-test.log"
+            --emulator staging --timeout 300 | tee ports/dos16/build/image-lab/compact-test.log
           cp ports/dos16/build/test-results.json ports/dos16/build/image-lab/compact-test.json
           python ports/dos16/image_size.py startup \
             ports/dos16/build/image-lab/compact-test.json \
@@ -149,7 +178,7 @@ jobs:
           set -euo pipefail
           cp ports/dos16/build/image-lab/PY86UPX.EXE ports/dos16/build/py86.exe
           python ports/dos16/run_dos.py --dosbox "$DOSBOX_STAGING" \
-            --emulator staging --timeout 300 > "$RUNNER_TEMP/upx-test.log"
+            --emulator staging --timeout 300 | tee ports/dos16/build/image-lab/upx-test.log
           cp ports/dos16/build/test-results.json ports/dos16/build/image-lab/upx8086-test.json
           python ports/dos16/image_size.py startup \
             ports/dos16/build/image-lab/upx8086-test.json \
