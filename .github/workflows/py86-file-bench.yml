@@ -1,0 +1,74 @@
+name: Py86 native readline A/B profile
+
+on:
+  push:
+    branches:
+      - tandypy-dos16-port
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    name: Generic vs native file.readline under DOSBox 8086
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install DOSBox and source dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends dosbox xvfb xauth
+          git clone --quiet --depth 1 --branch v1.24.1 \
+            https://github.com/micropython/micropython.git "$RUNNER_TEMP/mp124"
+          test "$(git -C "$RUNNER_TEMP/mp124" rev-parse HEAD)" = \
+            "ecfdd5d6f9be971852003c2049600dc7b3e2a838"
+          python ports/dos16/prepare_source.py --source "$RUNNER_TEMP/mp124"
+      - name: Install pinned 16-bit Open Watcom
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 \
+            "https://github.com/open-watcom/open-watcom-v2/releases/download/2026-11-01-Build/ow-snapshot.tar.xz" \
+            --output "$RUNNER_TEMP/ow.tar.xz"
+          mkdir -p "$RUNNER_TEMP/ow"
+          tar -xJf "$RUNNER_TEMP/ow.tar.xz" -C "$RUNNER_TEMP/ow"
+      - name: Build, regression test and benchmark both variants
+        shell: bash
+        run: |
+          set -euo pipefail
+          for mode in generic fast; do
+            echo "::group::File readline: $mode"
+            python ports/dos16/build.py \
+              --source "$RUNNER_TEMP/mp124" \
+              --watcom "$RUNNER_TEMP/ow" --file-readline-mode "$mode"
+            xvfb-run -a python ports/dos16/run_dos.py \
+              --dosbox "$(command -v dosbox)" --timeout 300
+            xvfb-run -a python ports/dos16/run_fiobench.py \
+              --dosbox "$(command -v dosbox)" --mode "$mode" --timeout 240
+            echo "::endgroup::"
+          done
+      - name: Compare native file-I/O timing
+        shell: bash
+        run: |
+          set -euo pipefail
+          python ports/dos16/compare_fiobench.py | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Upload A/B evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PY86-fileio-A-B
+          retention-days: 30
+          if-no-files-found: warn
+          path: |
+            ports/dos16/build/filebench-*.json
+            ports/dos16/build/filebench-comparison.md
+            ports/dos16/build/filebench-emulator.log
+            ports/dos16/filebench-test/*.OUT
+            ports/dos16/build/test-results.json
