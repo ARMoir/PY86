@@ -255,3 +255,13 @@ DOSBox and uses `xvfb-run` to execute the actual 8086 DOS executable.
 Packaging only proceeds after the DOSBox integration suite passes; on
 failure the CI uploads `PY86-test-logs` for debugging. The emulator test is
 not a substitute for testing on the real 7 MHz V20.
+
+
+### SHA-256 on 16-bit DOS: regression correction
+
+The first GitHub DOSBox run after enabling Actions identified a genuine 16-bit
+integer-promotion bug in the upstream SHA-256 block reader. Although SHA-256 of
+the empty string passed, the `abc` vector failed because `data[j+1] << 16`
+shifted a promoted 16-bit integer. The compatibility patch now widens **every**
+input byte to `uint32_t` before shifting. The test also covers a full 64-byte
+block, in addition to empty and `abc` reference digests.
