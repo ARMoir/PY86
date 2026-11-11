@@ -265,3 +265,22 @@ the empty string passed, the `abc` vector failed because `data[j+1] << 16`
 shifted a promoted 16-bit integer. The compatibility patch now widens **every**
 input byte to `uint32_t` before shifting. The test also covers a full 64-byte
 block, in addition to empty and `abc` reference digests.
+
+
+## Performance baseline (DOSBox, not a real V20 measurement)
+
+Run `python run_bench.py --dosbox /path/to/dosbox --mode baseline` after
+building `PY86.EXE`. Tests execute the **real 16-bit DOS executable** in
+DOSBox `core=normal, cputype=8086, cycles=fixed 20000`. The BIOS timer's
+roughly 55 ms resolution is handled by scaling each loop to at least 450 ms
+where possible and reporting three trials with median milliseconds per unit.
+
+`BENCH1.PY` measures local/global integer operations, dictionary lookups,
+instance attributes, method calls, module attributes and repeated string
+concatenation. `FRAMEBEN.PY` uses the original PythonClock face/hour/minute/
+second modules, times its frame computation *without* rendering or sleep, and
+leaves all original PythonClock files unchanged.
+
+GitHub Actions uploads the `PY86-baseline` JSON measurements. Compare on the
+same DOSBox configuration; the reported speeds are not 7 MHz V20 performance
+figures. Run the same scripts on real hardware for definitive speed results.

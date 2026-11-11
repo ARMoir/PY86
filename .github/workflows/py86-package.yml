@@ -79,6 +79,19 @@ jobs:
           xvfb-run -a python ports/dos16/run_dos.py \
             --dosbox "$(command -v dosbox)" --timeout 300
 
+      - name: Measure Py86 baseline (DOSBox fixed CPU setting)
+        shell: bash
+        run: |
+          xvfb-run -a python ports/dos16/run_bench.py \
+            --dosbox "$(command -v dosbox)" --mode baseline --timeout 240
+
+      - name: Upload baseline performance measurements
+        uses: actions/upload-artifact@v4
+        with:
+          name: PY86-baseline
+          path: ports/dos16/build/benchmark-baseline.json
+          retention-days: 30
+
       - name: Upload emulator test diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -89,6 +102,8 @@ jobs:
           path: |
             ports/dos16/build/emulator.log
             ports/dos16/build/test-results.json
+            ports/dos16/build/bench-emulator.log
+            ports/dos16/bench-test/*.OUT
             ports/dos16/dos-test/*.OUT
             ports/dos16/dos-test/RESULT.TXT
 
