@@ -328,3 +328,27 @@ publishes the current production metrics in `PY86-perf-production`.
 
 `LOOKUP.PY` asserts that cached dictionary and attribute lookups continue to
 reflect mutations and deletions, and is included in the mandatory DOSBox suite.
+
+
+## String concatenation and garbage-collection profiling
+
+The `Py86 string and GC profiling experiment` workflow builds two 8086-compatible
+executables: the unchanged production engine (`--string-mode original`) and an
+experimental one-character ASCII QSTR lookup cache (`--string-mode char-cache`).
+Both retain the production map-lookup optimization, 48 KB Python GC heap,
+16 KB C stack, source-level Python compatibility, and unmodified PythonClock.
+
+`tests/bench/STRGC.PY` compares string iteration, repeated `str += char`,
+`"".join(chars)`, and PythonClock frame assembly. It runs with fresh processes
+at `gc.threshold(-1)` (default allocation-failure collection), 4096, 8192, and
+16384 byte thresholds. Reports include elapsed duration, free bytes before,
+free bytes before/after an explicit GC, and measured explicit-GC duration.
+The script does not change production GC settings. A separate
+`run_bench.py` run measures the original microbenchmarks and clock frames.
+
+The alternate ASCII cache stores only interned QSTR identifiers, not mutable
+strings, and leaves UTF-8 multibyte handling on the original path. The
+experimental cache must not become the default without runtime correctness
+testing and a measurable improvement. All timings are DOSBox 8086
+`cycles=fixed 20000`, quantized to roughly 55 ms by BIOS ticks; they are
+not physical V20 benchmarks.
