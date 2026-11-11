@@ -59,13 +59,14 @@ def main(argv=None):
     p.add_argument("--archive", type=Path, required=True)
     p.add_argument("--py86", type=Path, required=True)
     p.add_argument("--dosbox", required=True)
+    p.add_argument("--emulator", choices=("classic", "staging"), default="classic")
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--timeout", type=int, default=300)
     args = p.parse_args(argv)
     args.out.mkdir(parents=True, exist_ok=True)
     stage = args.out / "stage"
     stage.mkdir(exist_ok=True)
-    outcome = {"environment": "DOSBox 8086, real Py86 DOS binary",
+    outcome = {"environment": "DOSBox " + args.emulator + ", real Py86 DOS binary",
                "passed": False, "batch_result": "NOT RUN", "stdout": ""}
     try:
         shutil.copyfile(args.py86, stage / "PY86.EXE")
@@ -83,10 +84,14 @@ def main(argv=None):
             encoding="ascii",
         )
         conf = args.out / "dosbox.conf"
+        # Staging is a real-mode x86 emulator, but no longer offers an
+        # exact 8086 cputype. Classic DOSBox retains the 8086 setting.
+        cpu = ("core=normal\ncpu_cycles=20000\n" if args.emulator == "staging"
+               else "core=normal\ncputype=8086\ncycles=fixed 20000\n")
+        video = ("[sdl]\nfullscreen=false\n" if args.emulator == "staging"
+                 else "[sdl]\nfullscreen=false\noutput=surface\n")
         conf.write_text(
-            "[sdl]\nfullscreen=false\noutput=surface\n"
-            "[dosbox]\nmemsize=1\n[cpu]\ncore=normal\n"
-            "cputype=8086\ncycles=fixed 20000\n"
+            video + "[dosbox]\nmemsize=1\n[cpu]\n" + cpu +
             "[autoexec]\nmount c \"" + str(stage.resolve()) + "\"\n"
             "c:\ncall RUN.BAT\nexit\n", encoding="ascii",
         )
@@ -98,7 +103,9 @@ def main(argv=None):
             options["startupinfo"] = startup
         with (args.out / "emulator.log").open("w") as log:
             proc = subprocess.run(
-                [args.dosbox, "-conf", str(conf), "-noconsole"],
+                ([args.dosbox, "--conf", str(conf), "--noprimaryconf", "--nolocalconf"]
+                 if args.emulator == "staging" else
+                 [args.dosbox, "-conf", str(conf), "-noconsole"]),
                 stdout=log, stderr=subprocess.STDOUT, timeout=args.timeout,
                 check=False, **options)
         outf = stage / "ROMAN.OUT"
