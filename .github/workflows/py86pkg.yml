@@ -88,19 +88,34 @@ jobs:
             --source "$RUNNER_TEMP/micropython-1.24.1" \
             --watcom "$RUNNER_TEMP/watcom"
 
-      - name: Install DOSBox for 8086 execution
-        shell: bash
-        run: |
-          sudo apt-get install -y --no-install-recommends dosbox xvfb xauth
-
-      - name: Execute converted roman through Py86
+      - name: Obtain pinned DOSBox Staging (no Ubuntu mirrors)
         shell: bash
         run: |
           set -euo pipefail
-          xvfb-run -a python tools/py86pkg/run_roman_dosbox.py \
+          curl --fail --location --retry 3 --retry-delay 4 \
+            'https://github.com/dosbox-staging/dosbox-staging/releases/download/v0.83.0/dosbox-staging-linux-x86_64-v0.83.0.tar.xz' \
+            --output "$RUNNER_TEMP/dosbox-staging.tar.xz"
+          echo 'd3a94f7f1c3e68a47ec88d61145506c7904452adb0c9c5928cb8cfe2331d6c5c  '"$RUNNER_TEMP/dosbox-staging.tar.xz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/dosbox-staging"
+          tar -xJf "$RUNNER_TEMP/dosbox-staging.tar.xz" -C "$RUNNER_TEMP/dosbox-staging"
+          find "$RUNNER_TEMP/dosbox-staging" -type f -name dosbox -print
+          exe="$(find "$RUNNER_TEMP/dosbox-staging" -type f -name dosbox -print -quit)"
+          test -n "$exe"
+          chmod +x "$exe"
+          echo "DOSBOX_STAGING=$exe" >> "$GITHUB_ENV"
+          "$exe" --version
+
+      - name: Execute converted roman through Py86
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          set -euo pipefail
+          python tools/py86pkg/run_roman_dosbox.py \
             --archive "$RUNNER_TEMP/ROMAN.ZIP" \
             --py86 ports/dos16/build/py86.exe \
-            --dosbox "$(command -v dosbox)" \
+            --dosbox "$DOSBOX_STAGING" --emulator staging \
             --out "$RUNNER_TEMP/roman-dosbox" --timeout 300
 
       - name: Upload converted Roman package
