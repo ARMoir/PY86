@@ -14,6 +14,10 @@ stage = root / 'dos-test'
 stage.mkdir(exist_ok=True)
 for f in (root / 'tests').iterdir():
     if f.is_file():
+        # DOSBox mounts a DOS 8.3 filesystem: long names are truncated,
+        # causing false FileNotFound failures during the DOS test batch.
+        if len(f.stem) > 8 or len(f.suffix.lstrip('.')) > 3:
+            raise SystemExit('DOS test filename exceeds 8.3: ' + f.name)
         shutil.copy2(f, stage / f.name)
 shutil.copy2(root / 'build/py86.exe', stage / 'PY86.EXE')
 # Ensure the built-in datetime module is tested without the old shim.
@@ -62,7 +66,7 @@ required = {'SMOKE.OUT': ['PASS smoke'], 'METHOD.OUT': ['PASS methods'],
             'GC.OUT': ['PASS gc_roots'], 'INPUT.OUT': ['PASS input'],
             'REPL.OUT': ['Py86 0.1', '>>> 3', '42', 'PASS repl_recovery', 'ValueError: repl recovery'],
             'ERROR.OUT': ['ValueError: intentional exit-code test'],
-            'EXITCATCH.OUT': ['PASS exit_can_be_caught'],
+            'EXCATCH.OUT': ['PASS exit_can_be_caught'],
             'EXIT0.OUT': ['PASS exit0_before'],
             'QUIT0.OUT': ['PASS quit0_before'],
             'SYSEX0.OUT': ['PASS sys_exit0_before'],

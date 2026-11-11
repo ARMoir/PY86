@@ -27,7 +27,7 @@ if errorlevel 1 goto fail
 py86 ERROR.PY > ERROR.OUT
 if not errorlevel 1 goto fail
 
-py86 EXITCATCH.PY > EXITCATCH.OUT
+py86 EXCATCH.PY > EXCATCH.OUT
 if errorlevel 1 goto fail
 py86 EXIT0.PY > EXIT0.OUT
 if errorlevel 1 goto fail

@@ -489,3 +489,8 @@ The DOSBox integration suite now tests exit/quit/sys.exit in both scripts and
 the REPL, exact DOS ERRORLEVEL values, no execution after exit, and caught
 SystemExit exceptions. The pinned-source `compat-exit-v1.24.1.patch` only
 exposes the Py86 host function in MicroPython's existing builtins table.
+
+
+Note: Every DOSBox test script must have a DOS 8.3 filename. The runner
+validates flat test files and refuses long names instead of letting DOS
+silently truncate them (for example `EXCATCH.PY`, not `EXITCATCH.PY`).
