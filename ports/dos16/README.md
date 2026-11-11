@@ -347,7 +347,13 @@ The script does not change production GC settings. A separate
 `run_bench.py` run measures the original microbenchmarks and clock frames.
 
 The alternate ASCII cache stores only interned QSTR identifiers, not mutable
-strings, and leaves UTF-8 multibyte handling on the original path. The
+strings, and leaves UTF-8 multibyte handling on the original path.
+A second opt-in optimization, `--string-mode lazy-hash`, avoids eagerly
+re-hashing intermediate concatenated strings that are never used as dictionary
+keys. A hash value of zero already means "not computed" in MicroPython; the
+new `runtime.c` fast path memoizes the hash upon its first request. This
+preserves equality, hashing and dictionary-key semantics. `both` tests the
+two changes together. The
 experimental cache must not become the default without runtime correctness
 testing and a measurable improvement. All timings are DOSBox 8086
 `cycles=fixed 20000`, quantized to roughly 55 ms by BIOS ticks; they are
@@ -362,3 +368,15 @@ It still records three consecutive concatenation trials within one process,
 including reclaimed memory, to expose heap retention without contaminating
 the subsequent clock benchmark. This changes the benchmark harness only, not
 the PythonClock sources or production interpreter.
+
+
+### Optional lazy hashing of temporary strings
+
+`--string-mode lazy-hash` experimentally changes the MicroPython v1.24.1
+string constructor to store a zero (uncomputed) hash for new strings, avoiding
+an entire eager hash pass over each intermediate result during repeated
+`str += char`. When a string or bytes object is later hashed for a dictionary,
+`runtime.c` computes and memoizes its hash on first use. `STRHASH.PY`
+verifies equality, Unicode, bytes and dictionary-key behavior for every
+variant. The `--string-mode both` build combines lazy hashing with the ASCII
+QSTR cache. All new flags are off by default until measured.

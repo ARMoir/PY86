@@ -22,6 +22,8 @@ py86 MODTEST.PY > MODTEST.OUT
 if errorlevel 1 goto fail
 py86 LOOKUP.PY > LOOKUP.OUT
 if errorlevel 1 goto fail
+py86 STRHASH.PY > STRHASH.OUT
+if errorlevel 1 goto fail
 py86 ERROR.PY > ERROR.OUT
 if not errorlevel 1 goto fail
 echo PASS > RESULT.TXT

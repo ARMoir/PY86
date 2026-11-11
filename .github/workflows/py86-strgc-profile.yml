@@ -44,8 +44,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for mode in original char-cache; do
-            if [ "$mode" = original ]; then label="s-original"; else label="s-charcache"; fi
+          for mode in original char-cache lazy-hash both; do
+            case "$mode" in
+              original) label="s-original" ;;
+              char-cache) label="s-charcache" ;;
+              lazy-hash) label="s-lazyhash" ;;
+              both) label="s-both" ;;
+            esac
             echo "::group::Benchmark $label"
             python ports/dos16/build.py \
               --source "$RUNNER_TEMP/mp124" \
