@@ -146,6 +146,7 @@ jobs:
             ports/dos16/dos-test/*.OUT
             ports/dos16/dos-test/RESULT.TXT
             ports/dos16/dos-test/DEMO.OUT
+            ports/dos16/dos-test/SHOW.OUT
             ports/dos16/dos-test/ONECLK.OUT
             ports/dos16/dos-test/PY86.LOG
 
@@ -184,7 +185,8 @@ jobs:
 
           - Built from commit \`${GITHUB_SHA}\` on branch \`${GITHUB_REF_NAME}\`.
           - Source: MicroPython 1.24.1 with Py86 DOS compatibility patches.
-          - Includes standard uncompressed PY86.EXE, generated CLOCK.PY and DEMO.PY.
+          - Includes standard uncompressed PY86.EXE, generated CLOCK.PY, DEMO.PY and one-screen SHOW.PY.
+          - RUNSHOW displays 8 live feature examples within 80x25 DOS screen limits.
           - RUNCLK and RUNTEST launch PY86.EXE directly.
           - Optional RUNLOAD uses START86 to measure DOS child-launch timing.
           - Original PythonClock sources remain unchanged in the repository.

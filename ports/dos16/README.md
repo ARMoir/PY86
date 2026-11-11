@@ -205,7 +205,9 @@ The ZIP has everything at its root (no extra directory or nested ZIP):
 - `PY86.EXE` (standard 16-bit DOS interpreter, preserved unchanged)
 - `START86.EXE` (tiny DOS launcher for full child startup timing)
 - `CLOCK.PY` (optimized single-file derivative of the original PythonClock)
-- `DEMO.PY` (self-checking feature showcase and diagnostic logger)
+- `DEMO.PY` (full self-checking feature showcase and diagnostic logger)
+- `SHOW.PY` (condensed photo-ready 80x25 Tandy showcase)
+- `RUNSHOW.BAT` (clear screen and run SHOW.PY with standard PY86.EXE)
 - `RUNCLK.BAT` (starts the optimized clock with flicker-reducing cursor home)
 - `RUNTEST.BAT` (runs PY86 directly with no extra timing launcher)
 - `RUNLOAD.BAT` (optional detailed startup measurements using START86)
@@ -291,6 +293,25 @@ standard, uncompressed interpreter remains the only released runtime.
 This result is specific to the tested Tandy 1000 EX, XT-IDE CF setup and
 clock workload. The slower packed build should not be recommended for V20
 startup optimization; future work can focus on source parsing or loading.
+
+## One-screen Reddit/photography showcase
+
+The release also includes **`SHOW.PY`** and **`RUNSHOW.BAT`**, a separate
+condensed demo designed expressly for the Tandy's **80-column by 25-line DOS
+display**. Type `RUNSHOW` on the real Tandy to clear the screen and show
+eight independently verified Python computations, with their actual outputs:
+list comprehensions, complex numbers, classes/methods, factorials, regular
+expressions, JSON decoding, SHA-256 hashing, and garbage collection. Output
+is entirely ASCII, at most **23 rows** and **76 columns**, leaving room for
+the DOS prompt without scrolling.
+
+It is safe to photograph directly on the CRT. It doesn't modify the
+original clock, change interpreter features, write files, or replace the
+full `DEMO.PY` / `RUNTEST` test suite. If any computed value is wrong,
+an assertion causes the script to fail rather than show a fake PASS.
+
+The actual 16-bit DOSBox integration suite runs `PY86 SHOW.PY` and verifies
+the output values, the eight commands, and the physical display limits.
 
 ## Full feature showcase and persistent DOS test log
 

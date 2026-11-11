@@ -36,6 +36,7 @@ for f in (root / 'tests/pythonclock').glob('*.py'):
         shutil.copy2(f, stage / f.name)
 generate_clock(stage / 'CLOCK.PY')
 shutil.copy2(root / 'examples' / 'DEMO.PY', stage / 'DEMO.PY')
+shutil.copy2(root / 'examples' / 'SHOW.PY', stage / 'SHOW.PY')
 (stage / 'ONECLK.PY').write_text(
     "import clock\n"
     "f = clock.render(12, 0, 0)\n"
@@ -99,6 +100,8 @@ required = {'SMOKE.OUT': ['PASS smoke'], 'METHOD.OUT': ['PASS methods'],
             'CLOCK.OUT': ['   ~-------------~'],
             'ONECLK.OUT': ['PASS optimized_clock', '   ~-------------~'],
             'DEMO.OUT': ['PASS feature_demo_complete', 'Tests passed: 19   failed: 0'],
+            'SHOW.OUT': ['PYTHON 3 FOR 16-BIT DOS', '[PASS] 8 LIVE EXAMPLES',
+                         'Source: github.com/ARMoir/micropython'],
             'GC.OUT': ['PASS gc_roots'],
             'MEMSIZE.OUT': ['PASS heap_gc', 'PASS heap_roots'],
             'MEMAUTO.OUT': ['heap_bytes=', 'mode=auto'],
@@ -153,6 +156,19 @@ else:
         assert int(lines[-1].split(',')[-1]) >= 0
     except (AssertionError, ValueError, IndexError):
         missing.append('LOADTIME.CSV: malformed parent DOS launch measurement')
+# Enforce actual DOS 80x25 screenshot suitability: 23 visible rows leaves
+# a command prompt below the showcase without causing the display to scroll.
+show_lines = logs.get('SHOW.OUT', '').splitlines()
+if len(show_lines) > 23 or len(show_lines) < 20:
+    missing.append('SHOW.OUT: should occupy 20..23 lines on an 80x25 screen')
+if any(len(line) > 76 for line in show_lines):
+    missing.append('SHOW.OUT: line exceeds 76 columns on 80-column DOS')
+if sum(line.startswith('>>> ') for line in show_lines) != 8:
+    missing.append('SHOW.OUT: expected exactly 8 live expression lines')
+for text_fragment in ('[0, 1, 4, 9, 16, 25]', '(5+0j)', '5040',
+                      "'86'", 'True', 'Source: github.com/ARMoir/micropython'):
+    if text_fragment not in logs.get('SHOW.OUT', ''):
+        missing.append('SHOW.OUT: missing actual result ' + text_fragment)
 demo_log = stage / 'PY86.LOG'
 history_path = stage / 'PY86TIME.CSV'
 if not history_path.is_file():
