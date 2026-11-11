@@ -11,7 +11,7 @@ with open("RDFILE.DAT", "rb") as f:
     f.seek(0)
     n = f.readinto(buf, 4)
     assert n == 4
-    assert bytes(buf[:n]) == b"\x00A\xff"
+    assert bytes(buf[:n]) == b"\x00A\xffB"
 print("PASS readinto")
 
 with open("RDTEXT.TXT", "w") as f:
