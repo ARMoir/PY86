@@ -514,3 +514,30 @@ The DOSBox integration tests cover `help()`, `help(list)`, and a deterministic
 pending-keyboard-interrupt injection during an infinite loop and BIOS sleep
 (using the test-only `PY86_TEST_CTRLC` DOS environment variable). They do not
 substitute for a physical keyboard Ctrl+C test on the actual Tandy V20.
+
+
+## Reading and writing DOS files with open()
+
+Py86 includes the native `open(path, mode='r')` built-in. It supports DOS
+text and binary files, modes `r`, `w`, `a`, optionally `+` and `b` or
+`t`, and a file object with `read()`, `readline()`, `readlines()`,
+`write()`, `seek()`, `tell()`, `flush()`, and `close()`.
+Use `with open(...) as f:` for automatic file closure. Text mode uses
+Open Watcom's DOS CRT translation for CRLF. Binary mode preserves bytes.
+
+Example:
+
+```python
+with open('NOTES.TXT', 'w') as f:
+    f.write('Hello Tandy!\\n')
+with open('NOTES.TXT', 'r') as f:
+    print(f.read())
+```
+
+File handling uses native C `FILE*` and MicroPython stream APIs, rather
+than importing external libraries. DOS 8.3 filenames are safest. The current
+48 KB Python heap limits how much content can be held in one Python string;
+use bounded `read(n)` for large files. Explicitly close open handles when
+not using a context manager. Advanced CPython `open()` features such as
+encoding conversion, buffering control, `x` exclusive-create mode and
+complete `io` module compatibility are not yet implemented.

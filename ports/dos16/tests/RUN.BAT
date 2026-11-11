@@ -26,6 +26,8 @@ py86 STRHASH.PY > STRHASH.OUT
 if errorlevel 1 goto fail
 py86 HELP.PY > HELP.OUT
 if errorlevel 1 goto fail
+py86 FILEIO.PY > FILEIO.OUT
+if errorlevel 1 goto fail
 set PY86_TEST_CTRLC=1
 py86 CTRLC.PY > CTRLC.OUT
 if errorlevel 1 goto fail

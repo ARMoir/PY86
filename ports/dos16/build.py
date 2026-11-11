@@ -86,6 +86,7 @@ mk = (src / 'py/py.mk').read_text()
 core = mk.split('PY_CORE_O_BASENAME = $(addprefix py/,', 1)[1].split(')', 1)[0]
 sources = [src / 'py' / (x + '.c') for x in re.findall(r'(\w+)\.o', core)]
 sources += [ROOT / 'port/main.c', ROOT / 'port/moddostime.c', ROOT / 'port/moddatetime.c',
+            ROOT / 'port/moddosfile.c',
             src / 'extmod/modrandom.c', src / 'extmod/modjson.c',
             src / 'extmod/modre.c', src / 'extmod/modhashlib.c',
             src / 'shared/readline/readline.c']
