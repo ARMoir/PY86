@@ -1,9 +1,8 @@
 name: Py86 Open Watcom compiler flag isolation
 
+# The full compiler A/B suite is manually dispatched to save CI cycles.
+# Normal pushes still run the production DOSBox regression/benchmark job.
 on:
-  push:
-    branches:
-      - tandypy-dos16-port
   workflow_dispatch:
 
 permissions:

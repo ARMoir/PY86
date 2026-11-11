@@ -438,3 +438,24 @@ The follow-up Watcom-isolation experiment tests `--vm-mode inline` (`-oe`),
 (all four), each against baseline with the same regression tests and opcode
 benchmarks. Its purpose is to isolate the call-speedup from the 4.7 KB
 executable growth before selecting any production compiler flag.
+
+
+### VM and near/far memory results
+
+Two complete DOSBox studies compared six variants each. `-zt=128` reduced
+near/static data use from 61,536 to 58,400 bytes but slowed dictionary and
+instance attribute reads by around 14%. Increasing the threshold to 384
+bytes had no effect. A fast one-byte operand decoder did not improve the VM.
+
+The `-ol` loop optimization improved function and bound-method throughput
+by about 15–18% in DOSBox, but increased the executable by 2,656 bytes and
+slowed one instance-attribute workload. All four compiler optimization flags
+together delivered comparable call gains without a measured attribute loss,
+but cost 4,672 bytes and did not measurably improve PythonClock.
+
+As a result, the standard interpreter retains its existing Open Watcom flags
+and 8086 CPU target. Use `--vm-mode loop` or `--vm-mode compiler` to create
+an experimental call-optimized executable; all variants are covered by the
+manually dispatched full benchmark workflows. The documented results are
+emulator-only; the physical 7 MHz V20 is the decisive performance test.
+See `PERFORMANCE.md` for full numbers and workflow links.

@@ -112,3 +112,65 @@ Production build defaults to `--lookup-mode map --string-mode both`. The
 comparison harness retains all individual flags. The expensive four-way
 string and GC workflow is now manually dispatched; ordinary pushes still
 run the full DOSBox correctness suite and production benchmark.
+
+
+## 8086 bytecode dispatch and segmented-memory study (2026-11-10)
+
+[Six-way complete DOSBox VM experiment](https://github.com/ARMoir/micropython/actions/runs/42948965948)
+compared baseline (`-ot -zt=256`), a new single-byte variable-length-operand
+fast path, `-oi -ol -oe -oh` compiler flags, `-zt=128` to move more static
+data into far segments, `-zt=384` to keep more static data near, and a
+combined decode/compiler build. All **six passed** the full DOSBox correctness
+suite and opcode-specific benchmark, with no changed Python semantics.
+
+| Main result | Baseline | Candidate | Consequence |
+| --- | ---: | ---: | --- |
+| `DGROUP` (near/static data bytes) | 61,536 | 58,400 with `-zt=128` | Saves 3,136 near bytes but ~14% slower dict/instance reads |
+| `DGROUP`, `-zt=384` | 61,536 | 61,536 | No objects moved; no measured benefit |
+| VM code size (bytes) | 7,842 | 8,312 with fast operand decoder | Adds 470 bytes, no overall improvement |
+| Python call throughput | baseline | +17.6% with compiler flags | Useful for call-heavy programs |
+| Bound-method throughput | baseline | +15.4% with compiler flags | Useful for call-heavy programs |
+| Clock frame benchmark | 192 ms/frame | 192 ms/frame with compiler flags | No observed change |
+| Python GC heap free | 45,488 | 45,488 in every variant | No measured heap change |
+
+The fixed-cycle DOSBox 8086 timing is not physical V20 speed. The VM fast
+operand decoder worsened a benchmark of instance attributes by approximately
+14%, so it remains off. The near/far tradeoff demonstrates that indiscriminate
+movement of static tables can degrade hot object lookups. The normal
+`-zt=256` remains the best balanced value tested. `DGROUP` has about
+4,000 bytes of headroom before its 64 KB size limit, not counting the
+separately allocated 48 KB Python GC heap. The MicroPython VM uses portable
+C `switch` bytecode dispatch. The GCC computed-goto extension is not
+supported by Open Watcom C16 and cannot be enabled as a portable switch.
+
+### Isolating Open Watcom compiler switches
+
+[Six additional complete DOSBox runs](https://github.com/ARMoir/micropython/actions/runs/42949869932)
+individually tested `-oe` (inline functions), `-oi` (intrinsics),
+`-ol` (loop optimizations), `-oh` (extra passes), and all combined, each
+against the same fixed baseline. Every build and regression suite passed.
+
+| Compiler setting | EXE size | Python calls | Bound methods | Instance attributes | PythonClock |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Baseline `-ot` | 334,618 bytes | baseline | baseline | baseline | baseline |
+| Inline `-oe` | 335,978 bytes | −0.1% | 0% | −14.3% | 0% |
+| Intrinsics `-oi` | 335,178 bytes | +5.2% | 0% | −14.1% | −0.3% |
+| Loop `-ol` | 337,274 bytes | **+17.6%** | **+15.4%** | −14.1% | +16.7% |
+| Extra `-oh` | 334,730 bytes | +11.0% | +7.2% | −14.1% | 0% |
+| All four | 339,290 bytes | **+17.6%** | **+15.4%** | 0% | 0% |
+
+Positive percentages indicate higher throughput, not reduction in elapsed
+time; +17.6% throughput means approximately 15% less elapsed time. Individual
+measurements are quantized by the ~55 ms BIOS tick. In particular, the
+clock-frame +16.7% figure arises from a short two-frame test and should
+not be interpreted as a confirmed 16.7% speedup on hardware.
+
+**Decision:** No global compiler or near/far change is justified yet. For
+some call-heavy programs, `--vm-mode loop` and `--vm-mode compiler` are
+promising optional builds, but each has code-size or performance tradeoffs.
+Keep the default `--vm-mode baseline` and target CPU `-0`, preserving the
+single executable on 8086, NEC V20 and 286 machines. Future work could mark
+specific *cold* static tables as far rather than penalizing all object lookups
+with a blanket `-zt=128`. The comparison workflows remain manually
+dispatchable and upload linker maps for analysis. Validate on the physical
+V20 before changing the production default.
