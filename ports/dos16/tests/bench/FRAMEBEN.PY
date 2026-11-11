@@ -27,21 +27,13 @@ def render(n):
         last = len(display)
     return last
 
-n = 1
-while True:
-    gc.collect()
-    t0 = time.ticks_ms()
-    result = render(n)
-    dt = time.ticks_diff(time.ticks_ms(), t0)
-    if dt >= 450 or n >= 16:
-        break
-    n *= 2
-
+# One isolated sample per interpreter invocation avoids accumulating dynamic
+# qstrs/references over many frames in Py86's tiny 48KB heap. The DOSBox
+# harness launches a fresh PY86.EXE three times and records every trial.
+gc.collect()
 print("MEM", gc.mem_free(), gc.mem_alloc())
-for trial in range(3):
-    gc.collect()
-    t0 = time.ticks_ms()
-    result = render(n)
-    dt = time.ticks_diff(time.ticks_ms(), t0)
-    print("BENCH", "clock_frame", trial, n, dt, result)
+t0 = time.ticks_ms()
+result = render(2)
+dt = time.ticks_diff(time.ticks_ms(), t0)
+print("BENCH", "clock_frame", 0, 2, dt, result)
 print("PASS framebench")

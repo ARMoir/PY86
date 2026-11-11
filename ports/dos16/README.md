@@ -284,3 +284,8 @@ leaves all original PythonClock files unchanged.
 GitHub Actions uploads the `PY86-baseline` JSON measurements. Compare on the
 same DOSBox configuration; the reported speeds are not 7 MHz V20 performance
 figures. Run the same scripts on real hardware for definitive speed results.
+
+
+The frame benchmark launches three fresh Py86 processes and renders two
+frames per process. This avoids invalidating measurements by accumulating
+long-lived allocations in the 48 KB interpreter heap during calibration.

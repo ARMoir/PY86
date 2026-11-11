@@ -34,6 +34,10 @@ def main():
         b"if errorlevel 1 goto fail\r\n"
         b"PY86 FRAMEBEN.PY > FRAMEBEN.OUT\r\n"
         b"if errorlevel 1 goto fail\r\n"
+        b"PY86 FRAMEBEN.PY >> FRAMEBEN.OUT\r\n"
+        b"if errorlevel 1 goto fail\r\n"
+        b"PY86 FRAMEBEN.PY >> FRAMEBEN.OUT\r\n"
+        b"if errorlevel 1 goto fail\r\n"
         b"echo PASS > BENCH.RES\r\n"
         b"goto done\r\n"
         b":fail\r\necho FAIL > BENCH.RES\r\n"
@@ -76,8 +80,10 @@ def main():
                 memories[script] = {"free": int(fields[1]), "allocated": int(fields[2])}
             if fields[0] == "BENCH" and len(fields) == 6:
                 _, name, trial, count, ms, check = fields
-                parsed[script].setdefault(name, []).append({
-                    "trial": int(trial), "count": int(count),
+                existing = parsed[script].setdefault(name, [])
+                existing.append({
+                    "trial": len(existing) if script == "FRAMEBEN" else int(trial),
+                    "count": int(count),
                     "ms": int(ms), "checksum": int(check),
                 })
 
