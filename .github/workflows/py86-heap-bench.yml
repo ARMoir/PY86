@@ -1,9 +1,8 @@
 name: Py86 single-segment adaptive heap A/B
 
+# Full fixed-vs-auto A/B profiling is on-demand.
+# The normal package push workflow still runs all DOSBox tests and production benchmark.
 on:
-  push:
-    branches:
-      - tandypy-dos16-port
   workflow_dispatch:
 
 permissions:

@@ -225,3 +225,52 @@ address limit or remove the ~64 KB single-allocation limit. Heap sizes
 and usable Python free memory must be checked using the actual EXE
 under DOSBox and preferably on the real NEC V20. Benchmarking at 48K
 and automatic sizes is a separate comparison, not a CPU-clock claim.
+
+
+### Verified automatic sizing and fixed-heap comparison (2026-11-11)
+
+The [first adaptive-heap DOSBox production build passed](https://github.com/ARMoir/micropython/actions/runs/43021273523),
+including the full interpreter/PythonClock regression tests, heap-root tests,
+forced 24,000-, 48,000-, and 60,000-byte startup tests, capped automatic
+32,000-byte selection and invalid-size diagnostics. Actual startup memory
+reported by `PY86 --heap-info`:
+
+| Configuration | Raw far heap | Usable GC pool | GC free at startup |
+| --- | ---: | ---: | ---: |
+| `PY86_HEAP=48000` | 48,000 B | 47,232 B | 47,136 B |
+| `PY86_HEAP=auto` | **60,000 B** | **59,008 B** | **58,912 B** |
+| `PY86_HEAP_MAX=32000` | 32,000 B | 31,488 B | 31,392 B |
+| `PY86_HEAP=24000` | 24,000 B | 23,616 B | 23,520 B |
+
+The 60K startup has **11,776 bytes / ~25% more free GC capacity** than
+48K. This comes at the cost of another 12,000 bytes of DOS conventional
+memory, so automatic selection must always check remaining native headroom.
+
+The [single-executable fixed 48K vs automatic 60K DOSBox A/B](https://github.com/ARMoir/micropython/actions/runs/43021603458)
+passed with identical output checksums. Benchmarks use an 8086 at fixed
+20,000 cycles and BIOS timer resolution of roughly 55ms:
+
+| Workload | Fixed 48K ms/op | Auto 60K ms/op | Throughput change |
+| --- | ---: | ---: | ---: |
+| Local arithmetic | 0.0386 | 0.0386 | 0% |
+| Global arithmetic | 0.0429 | 0.0429 | 0% |
+| Dictionary lookups | 0.0516 | 0.0516 | 0% |
+| Instance attributes | 0.0600 | 0.0600 | 0% |
+| Bound methods | 0.5150 | 0.6181 | −16.7% |
+| Module attributes | 0.0772 | 0.0688 | +12.3% |
+| String concatenation | 0.7333 | 0.8233 | −10.9% |
+| PythonClock frame computation | 192.5 | 164.5 | +17.0% |
+
+The differences are mixed and many are around a BIOS timer tick; this is
+**not evidence of a universal performance speedup**. The main reliable gain
+is more space for live Python objects. Garbage-collection sweeps may take
+longer on a larger heap. Both raw heap size and GC metrics are now written
+to `benchmark-*.json` from the actual interpreter, instead of assuming
+48K. Tests on a physical V20 with DOS 6.22 are recommended.
+
+**Limitations:** Ordinary Watcom far pointers have 16-bit offsets and the
+allocator only accepts a contiguous block strictly inside one segment.
+The 32 KiB post-allocation native-memory probe is immediately freed; it
+does not guarantee 32 KiB of later free space. Additional EMS/XMS or
+above-64KB GC capacity requires a separately tested split-heap allocator
+and correct segmented pointer/GC root handling, not just a larger malloc.

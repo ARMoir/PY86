@@ -609,3 +609,19 @@ pointer arithmetic, then a separate multi-block allocator design.
 The DOSBox integration suite checks forced 24K, 48K and 60K modes,
 32K auto caps, invalid input, GC allocations and roots. The real V20
 should still be used to verify native-memory margins and performance.
+
+
+### Verified adaptive heap results
+
+The initial DOSBox validation selected a **60,000-byte** raw far heap with
+**58,912 GC bytes free** immediately after startup, compared to
+**47,136 free** using the prior fixed 48,000-byte setting. All existing
+PythonClock and library tests passed. The fixed-versus-auto benchmarking
+showed mixed instruction-level performance, not a reliable speed improvement;
+the benefit is principally **25% more live Python storage** in the tested
+DOSBox configuration. See `PERFORMANCE.md` for the full comparison.
+
+To test the selection on a real DOS machine run `PY86 --heap-info`.
+For conservative operation use `SET PY86_HEAP=48000`; restore adaptive
+operation with `SET PY86_HEAP=`. This preserves the original proven size
+without rebuilding. A low-memory DOS installation may select a smaller heap.
