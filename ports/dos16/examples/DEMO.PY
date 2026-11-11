@@ -18,6 +18,13 @@ def show(message):
         LOG.flush()
 
 
+def example(code, output):
+    # Print the actual value computed by the test, not a canned result.
+    # Both lines go to the DOS screen and to PY86.LOG.
+    show('    >>> ' + code)
+    show('    output: ' + repr(output))
+
+
 def line():
     show('+----------------------------------------------------------+')
 
@@ -30,6 +37,8 @@ def banner(title):
 
 def check(label, func):
     global PASSED, FAILED
+    show('')
+    show('  ' + label.upper())
     start = time.ticks_ms()
     try:
         func()
@@ -48,13 +57,15 @@ def integers():
     assert 10 % 3 == 1
     assert 1000000 * 1000000 == 1000000000000
     assert 2 ** 10 == 1024
-    show('         big integer 1000000^2 = %d' % (1000000 * 1000000))
+    example('-7 // 3', -7 // 3)
+    example('1000000 * 1000000', 1000000 * 1000000)
 
 
 def floats_complex():
     assert 1.25 + 2.5 == 3.75
     assert (1 + 2j) * (1 - 2j) == 5
-    show('         float and complex arithmetic OK')
+    example('1.25 + 2.5', 1.25 + 2.5)
+    example('(1+2j) * (1-2j)', (1 + 2j) * (1 - 2j))
 
 
 def text_unicode():
@@ -63,7 +74,8 @@ def text_unicode():
     assert 'abcdef'[1:4] == 'bcd'
     assert '\u03a9' != 'A'
     assert len('\u03a9') == 1
-    show('         strings / slicing / UTF-8 code points OK')
+    example("'abcdef'[1:4]", 'abcdef'[1:4])
+    example("ord('\\u03a9')", ord('\u03a9'))
 
 
 def containers():
@@ -73,7 +85,8 @@ def containers():
     assert mapping['value'] == 86
     assert set((1, 1, 2, 3)) == {1, 2, 3}
     assert tuple(squares[:2]) == (0, 1)
-    show('         list, dict, set, tuple, comprehension OK')
+    example('[i*i for i in range(6)]', squares)
+    example("mapping['value']", mapping['value'])
 
 
 def classes_generators():
@@ -89,7 +102,8 @@ def classes_generators():
     assert thing.step() == 42
     g = (n * n for n in range(3))
     assert next(g) == 0 and next(g) == 1 and next(g) == 4
-    show('         classes / methods / generators OK')
+    example('Ticker(41).step()', thing.value)
+    example('next(n*n for n in range(3))', next(n * n for n in range(3)))
 
 
 def functions_closure():
@@ -101,7 +115,8 @@ def functions_closure():
     def collect(*args, **kwargs):
         return (len(args), kwargs['a'])
     assert collect(1, 2, a=3) == (2, 3)
-    show('         closures / varargs / keywords OK')
+    example('multiplier(7)(6)', multiplier(7)(6))
+    example('collect(1, 2, a=3)', collect(1, 2, a=3))
 
 
 def exceptions():
@@ -115,7 +130,7 @@ def exceptions():
     finally:
         state.append('finally')
     assert state == ['caught', 'finally']
-    show('         raise / catch / finally OK')
+    example("catch ValueError('expected') + finally", state)
 
 
 def math_module():
@@ -123,8 +138,8 @@ def math_module():
     assert math.sqrt(144) == 12.0
     assert math.factorial(5) == 120
     assert math.isclose(math.sin(math.pi / 2), 1.0)
-    show('         sqrt(144) = %s, 5! = %d' %
-         (str(math.sqrt(144)), math.factorial(5)))
+    example('math.sqrt(144)', math.sqrt(144))
+    example('math.factorial(5)', math.factorial(5))
 
 
 def random_module():
@@ -133,7 +148,7 @@ def random_module():
     n = random.randint(1, 100)
     assert 1 <= n <= 100
     assert random.choice((3, 7, 11)) in (3, 7, 11)
-    show('         seeded random roll = %d' % n)
+    example('random.seed(86); random.randint(1,100)', n)
 
 
 def datetime_module():
@@ -142,8 +157,8 @@ def datetime_module():
     assert 1 <= now.month <= 12 and 0 <= now.hour <= 23
     fixed = datetime.datetime(2026, 11, 11, 9, 30, 5)
     assert fixed.year == 2026 and fixed.minute == 30
-    show('         DOS date/time = %04d-%02d-%02d %02d:%02d:%02d' %
-         (now.year, now.month, now.day, now.hour, now.minute, now.second))
+    example('datetime.datetime.now()', '%04d-%02d-%02d %02d:%02d:%02d' %
+            (now.year, now.month, now.day, now.hour, now.minute, now.second))
 
 
 def time_module():
@@ -153,7 +168,9 @@ def time_module():
     start = time.ticks_ms()
     time.sleep_ms(60)
     assert time.ticks_diff(time.ticks_ms(), start) >= 0
-    show('         localtime / BIOS ticks / sleep_ms OK')
+    example('time.localtime()[:6]', t[:6])
+    example('ticks elapsed after sleep_ms(60)',
+            time.ticks_diff(time.ticks_ms(), start))
 
 
 def regex_module():
@@ -161,7 +178,8 @@ def regex_module():
     assert re.match('a+b', 'aaabc').group(0) == 'aaab'
     assert re.search('[0-9]+', 'DOS86PY').group(0) == '86'
     assert re.compile('(ab)+').match('ababX').group(0) == 'abab'
-    show('         regular expression engine OK')
+    example("re.search('[0-9]+','DOS86PY').group(0)",
+            re.search('[0-9]+', 'DOS86PY').group(0))
 
 
 def json_module():
@@ -169,7 +187,8 @@ def json_module():
     data = {'platform': 'dos', 'values': [1, 2, 3], 'ok': True}
     encoded = json.dumps(data)
     assert json.loads(encoded) == data
-    show('         round-trip JSON = %d bytes' % len(encoded))
+    example('json.dumps(data)', encoded)
+    example('json.loads(encoded)["values"]', json.loads(encoded)['values'])
 
 
 def sha256_module():
@@ -181,13 +200,15 @@ def sha256_module():
     h.update(b'a')
     h.update(b'bc')
     assert h.digest() == digest
-    show('         native SHA-256 known vector / updates OK')
+    hexdigest = ''.join('%02x' % n for n in digest)
+    example("sha256(b'abc').digest() as hex", hexdigest)
 
 
 def errno_module():
     import errno
     assert errno.ENOENT > 0 and errno.EEXIST > 0 and errno.EINVAL > 0
-    show('         DOS error constants OK')
+    example('errno.ENOENT', errno.ENOENT)
+    example('errno.EINVAL', errno.EINVAL)
 
 
 def filesystem():
@@ -211,7 +232,8 @@ def filesystem():
     os.rename(filename, renamed)
     assert renamed in os.listdir()
     os.remove(renamed)
-    show('         text / binary / readinto / rename OK')
+    example("readinto(bytearray(4)) from P86D.TXT", bytes(data))
+    example("os.rename('P86D.TXT','P86E.TXT')", 'renamed and removed')
 
 
 def os_module():
@@ -219,7 +241,8 @@ def os_module():
     path = os.getcwd()
     assert len(path) >= 1
     assert os.sep in ('\\', '/')
-    show('         OS: %s, cwd: %s' % (os.name, path))
+    example('os.name', os.name)
+    example('os.getcwd()', path)
 
 
 def gc_module():
@@ -227,12 +250,12 @@ def gc_module():
     gc.collect()
     after = gc.mem_free()
     assert before > 0 and after > 0
-    show('         heap free: %d bytes' % after)
+    example('gc.mem_free() after collect()', after)
 
 
 def command_line():
     assert len(sys.argv) >= 1
-    show('         script = %s' % sys.argv[0])
+    example('sys.argv', sys.argv)
 
 
 def main():
@@ -243,7 +266,8 @@ def main():
         banner('PY86 / 16-BIT DOS FEATURE SHOWCASE')
         show('Platform: %s  |  Interpreter: MicroPython DOS port' % os.name)
         show('Result log: PY86.LOG (saved on current DOS drive)')
-        show('Tests below run on this computer, not in host CPython.')
+        show('The commands and outputs below are executed live by PY86.')
+        show('Each >>> line shows the operation; output is the real result.')
         show('')
         banner('LANGUAGE AND OBJECTS')
         check('Integer arithmetic and big ints', integers)
@@ -272,7 +296,7 @@ def main():
              (PASSED, FAILED, PASSED + FAILED))
         show('Elapsed: %d ms' % time.ticks_diff(time.ticks_ms(), started))
         show('Final free heap: %d bytes' % gc.mem_free())
-        show('Detailed transcript saved in PY86.LOG')
+        show('All commands, real outputs and results saved in PY86.LOG')
         show('PASS feature_demo_complete' if FAILED == 0 else
              'FAIL feature_demo_incomplete')
         line()
