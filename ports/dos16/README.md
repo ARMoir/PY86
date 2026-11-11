@@ -353,9 +353,9 @@ re-hashing intermediate concatenated strings that are never used as dictionary
 keys. A hash value of zero already means "not computed" in MicroPython; the
 new `runtime.c` fast path memoizes the hash upon its first request. This
 preserves equality, hashing and dictionary-key semantics. `both` tests the
-two changes together. The
-experimental cache must not become the default without runtime correctness
-testing and a measurable improvement. All timings are DOSBox 8086
+two changes together. The combined version passed the DOSBox correctness suite and delivered a
+measured speed improvement, so it is now the production default. Use the
+original build mode to reproduce pre-optimization behavior. All timings are DOSBox 8086
 `cycles=fixed 20000`, quantized to roughly 55 ms by BIOS ticks; they are
 not physical V20 benchmarks.
 
@@ -379,4 +379,22 @@ an entire eager hash pass over each intermediate result during repeated
 `runtime.c` computes and memoizes its hash on first use. `STRHASH.PY`
 verifies equality, Unicode, bytes and dictionary-key behavior for every
 variant. The `--string-mode both` build combines lazy hashing with the ASCII
-QSTR cache. All new flags are off by default until measured.
+QSTR cache. Both optimizations are enabled by default. Use `--string-mode original`
+to turn them off, or the individual modes to isolate their effects.
+
+
+### Default string optimizations (measured)
+
+The four-mode DOSBox comparison showed **25% higher throughput for repeated
+string concatenation** with deferred hash calculation, and roughly **14%
+higher throughput** for the PythonClock frame benchmark when lazy hashing
+and ASCII character QSTR caching are combined. Python GC heap is unchanged;
+the combined executable is 32 bytes larger than the unoptimized version.
+Production builds use `--string-mode both`; `original` restores the old
+behavior, `char-cache` and `lazy-hash` isolate changes.
+
+The GC experiments favored the existing allocation-failure policy for speed.
+More frequent collections provided more post-collection free heap but slowed
+execution, so the default GC threshold is unchanged. See `PERFORMANCE.md`.
+The costly four-configuration profile is manually dispatched, while normal
+push CI continues to execute all correctness tests and a production benchmark.

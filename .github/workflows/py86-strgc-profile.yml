@@ -1,9 +1,8 @@
 name: Py86 string and GC profiling experiment
 
+# Expensive full A/B profile: opt-in only. Normal push CI still builds,
+# correctness-tests, benchmarks and publishes the production interpreter.
 on:
-  push:
-    branches:
-      - tandypy-dos16-port
   workflow_dispatch:
 
 permissions:

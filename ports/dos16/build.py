@@ -16,7 +16,7 @@ p.add_argument('--source', type=Path, required=True)
 p.add_argument('--watcom', type=Path, required=True)
 p.add_argument('--only', default='')
 p.add_argument('--string-mode', choices=('original', 'char-cache', 'lazy-hash', 'both'),
-               default='original', help='Experimental string optimizations; default unchanged')
+               default='both', help='String optimization (production default: both)')
 p.add_argument('--resume', action='store_true')
 p.add_argument('--lookup-mode', choices=('off', 'map', 'attr', 'both'),
                default='map', help='Lookup optimizations (production default: map)')

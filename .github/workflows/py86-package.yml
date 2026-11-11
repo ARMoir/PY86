@@ -83,13 +83,13 @@ jobs:
         shell: bash
         run: |
           xvfb-run -a python ports/dos16/run_bench.py \
-            --dosbox "$(command -v dosbox)" --mode production-map --timeout 240
+            --dosbox "$(command -v dosbox)" --mode production-strings --timeout 240
 
       - name: Upload production performance measurements
         uses: actions/upload-artifact@v4
         with:
           name: PY86-perf-production
-          path: ports/dos16/build/benchmark-production-map.json
+          path: ports/dos16/build/benchmark-production-strings.json
           retention-days: 30
 
       - name: Upload emulator test diagnostics on failure

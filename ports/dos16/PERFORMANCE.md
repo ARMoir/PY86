@@ -65,3 +65,42 @@ The 8086 emulator results are a first filter. Benchmarks should be repeated
 on the real V20 before attributing specific speedups to the 7 MHz Tandy.
 Future interpreter optimizations should preserve Python semantics and use the
 same regression tests and benchmark framework.
+
+
+## String concatenation, QSTR caching, and garbage collection (2026-11-10)
+
+The pinned-v1.24.1 string constructor eagerly re-hashed every newly allocated
+intermediate string even when it was never used as a dictionary key.
+`compat-lazyhash-v1.24.1.patch` stores zero (uncomputed) until first `hash()`,
+when the runtime computes and memoizes the result. It preserves equality,
+dictionary-key semantics, string immutability, Unicode and byte strings;
+`STRHASH.PY` explicitly tests these properties. The ASCII-QSTR cache avoids
+repeated intern-pool lookups when iterating one-byte ASCII strings and leaves
+non-ASCII paths unchanged.
+
+The [four-mode DOSBox comparison](https://github.com/ARMoir/micropython/actions/runs/42945176395)
+passed the full regression suite. Fixed DOSBox 8086 at 20,000 cycles:
+
+| Workload | Baseline | Combined (char cache + lazy hashing) | Gain |
+| --- | ---: | ---: | ---: |
+| Repeated concatenation, ms/add | 0.917 | approx. 0.734 | **25% higher throughput** |
+| Isolated two-frame PythonClock, ms/frame | 219.5 | approx. 192.5 | **14% higher throughput** |
+| GC clock profile, ms/frame | 247 | approx. 192.5 | 28.3% higher throughput |
+| String splitting in threshold profile | 22 ms per split | approx. 11 ms | about 2× faster |
+
+The BIOS clock resolves about 55 ms and the two-frame results should not be
+overinterpreted. These are *not* physical 7 MHz V20 timings. The combined EXE
+was 334,618 bytes vs. 334,586 bytes baseline, both with 44,624 free Python GC
+heap bytes at BENCH1 startup.
+
+`gc.threshold(-1)`, 4096, 8192 and 16384 were profiled. Frequent proactive
+collections could leave more free Python heap after concatenation (roughly
+32 KB at the default vs 37 KB using 8192) but slowed the workload (roughly
+18% with 8192 on baseline). The **default GC threshold is unchanged** for speed;
+applications can select `gc.threshold(n)` if memory headroom matters more.
+PythonClock source remains unmodified.
+
+Production build defaults to `--lookup-mode map --string-mode both`. The
+comparison harness retains all individual flags. The expensive four-way
+string and GC workflow is now manually dispatched; ordinary pushes still
+run the full DOSBox correctness suite and production benchmark.
