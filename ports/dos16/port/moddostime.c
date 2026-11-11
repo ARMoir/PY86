@@ -72,6 +72,53 @@ static unsigned long py86_bios_ticks(void) {
     return ((unsigned long)out_regs.x.cx << 16) | out_regs.x.dx;
 }
 
+/* Observe interpreter startup from the earliest possible C main() call.
+ * The DOS MZ loader runs BEFORE main(); loader and COMMAND.COM overhead are
+ * not included here. Resolution is the BIOS timer tick (about 54.9 ms).
+ * Using the same DOS BIOS clock as time.ticks_ms keeps all phases comparable
+ * and has negligible runtime cost outside of initial sampling.
+ */
+static unsigned long py86_startup_begin_ticks;
+static unsigned long py86_startup_init_ticks;
+static int py86_startup_started;
+
+void py86_startup_begin(void) {
+    py86_startup_begin_ticks = py86_bios_ticks();
+    py86_startup_init_ticks = py86_startup_begin_ticks;
+    py86_startup_started = 1;
+}
+
+void py86_startup_initialized(void) {
+    if (py86_startup_started) {
+        py86_startup_init_ticks = py86_bios_ticks();
+    }
+}
+
+static unsigned long py86_elapsed_ms(unsigned long begin, unsigned long end) {
+    unsigned long ticks;
+    if (end >= begin) {
+        ticks = end - begin;
+    } else {
+        /* BIOS tick counter resets around midnight. */
+        ticks = PY86_TICKS_PER_DAY - begin + end;
+    }
+    return ticks * 55UL - ticks * 75UL / 1000UL;
+}
+
+static mp_obj_t py86_time_init_ms(void) {
+    if (!py86_startup_started) return MP_OBJ_NEW_SMALL_INT(0);
+    return mp_obj_new_int((mp_int_t)py86_elapsed_ms(
+        py86_startup_begin_ticks, py86_startup_init_ticks));
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(py86_time_init_ms_obj, py86_time_init_ms);
+
+static mp_obj_t py86_time_startup_ms(void) {
+    if (!py86_startup_started) return MP_OBJ_NEW_SMALL_INT(0);
+    return mp_obj_new_int((mp_int_t)py86_elapsed_ms(
+        py86_startup_begin_ticks, py86_bios_ticks()));
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(py86_time_startup_ms_obj, py86_time_startup_ms);
+
 static mp_obj_t py86_os_system(mp_obj_t command_in) {
     const char *cmd = mp_obj_str_get_str(command_in);
     const char *p = cmd;
@@ -319,6 +366,8 @@ static const mp_rom_map_elem_t py86_time_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_time), MP_ROM_PTR(&py86_time_time_obj) },
     { MP_ROM_QSTR(MP_QSTR_ticks_ms), MP_ROM_PTR(&py86_time_ticks_ms_obj) },
     { MP_ROM_QSTR(MP_QSTR_ticks_diff), MP_ROM_PTR(&py86_time_ticks_diff_obj) },
+    { MP_ROM_QSTR(MP_QSTR_init_ms), MP_ROM_PTR(&py86_time_init_ms_obj) },
+    { MP_ROM_QSTR(MP_QSTR_startup_ms), MP_ROM_PTR(&py86_time_startup_ms_obj) },
 };
 static MP_DEFINE_CONST_DICT(py86_time_globals, py86_time_globals_table);
 const mp_obj_module_t py86_time_module = {

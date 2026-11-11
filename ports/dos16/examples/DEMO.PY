@@ -1,9 +1,14 @@
 # PY86 full feature showcase. ASCII-only output is readable on DOS 6.22.
 # All results are written to PY86.LOG as well as to the console.
 # This is a runnable example, not a replacement for the deeper CI test suite.
+import time
+# Capture startup immediately at the first executed Python statements.
+# C main() -> native VM initialization and C main() -> first Python code.
+# DOS MZ loading / COMMAND.COM execution before C main is not included.
+STARTUP_MS = time.startup_ms()
+INIT_MS = time.init_ms()
 import sys
 import os
-import time
 import gc
 
 PASSED = 0
@@ -268,6 +273,17 @@ def main():
         show('Result log: PY86.LOG (saved on current DOS drive)')
         show('The commands and outputs below are executed live by PY86.')
         show('Each >>> line shows the operation; output is the real result.')
+        show('')
+        banner('INTERPRETER STARTUP')
+        example('time.init_ms()  # C main to VM ready', INIT_MS)
+        example('time.startup_ms()  # C main to first Python', STARTUP_MS)
+        assert INIT_MS >= 0 and STARTUP_MS >= INIT_MS
+        show('  Native VM startup: %d ms' % INIT_MS)
+        show('  First Python code: %d ms' % STARTUP_MS)
+        show('  Source parse/dispatch: approx %d ms' %
+             (STARTUP_MS - INIT_MS))
+        show('  BIOS timer resolution: about 55 ms')
+        show('  Note: EXE loading before C main is not included.')
         show('')
         banner('LANGUAGE AND OBJECTS')
         check('Integer arithmetic and big ints', integers)

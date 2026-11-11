@@ -76,7 +76,7 @@ required = {'SMOKE.OUT': ['PASS smoke'], 'METHOD.OUT': ['PASS methods'],
             'CORE.OUT': ['PASS numeric', 'PASS unicode', 'PASS control', 'PASS functions',
                          'PASS exceptions', 'PASS containers', 'PASS classes_generators',
                          'PASS imports', 'PASS core_complete'],
-            'CLOCKAPI.OUT': ['PASS datetime_builtin', 'PASS dos_datetime', 'PASS dos_sleep', 'PASS dos_cls'],
+            'CLOCKAPI.OUT': ['PASS startup_timing', 'PASS datetime_builtin', 'PASS dos_datetime', 'PASS dos_sleep', 'PASS dos_cls'],
             'LIBTEST.OUT': ['PASS math', 'PASS random', 'PASS os', 'PASS time'],
             'MODTEST.OUT': ['PASS errno', 'PASS json', 'PASS re', 'PASS hashlib',
                             'PASS native_modules_complete'],
@@ -150,6 +150,12 @@ else:
     if ('PASS feature_demo_complete' not in demo_text or
             demo_text.count('[PASS]') != 19 or '[FAIL]' in demo_text):
         missing.append('PY86.LOG: feature demo results missing or incomplete')
+    # Startup timing must be measured by native PY86 code (not host Python).
+    for label in ('INTERPRETER STARTUP', 'time.init_ms()', 'time.startup_ms()',
+                  'Native VM startup:', 'First Python code:',
+                  'Source parse/dispatch:', 'EXE loading before C main'):
+        if label not in demo_text:
+            missing.append('PY86.LOG: missing startup timing ' + label)
     # The showcase must expose the actual operations and their computed
     # results, on BOTH the DOS console and in the persistent log.
     demo_stdout = logs.get('DEMO.OUT', '')

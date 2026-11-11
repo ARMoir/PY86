@@ -21,6 +21,8 @@
 
 /* From moddostime.c: opt-in cursor-home behavior for interactive redraws. */
 extern void py86_set_home_cls(int enabled);
+extern void py86_startup_begin(void);
+extern void py86_startup_initialized(void);
 
 static char *stack_top;
 static void *heap;
@@ -282,6 +284,8 @@ int main(int argc, char **argv) {
     int first_arg = 1;
     char line[256];
     static char source[2048];
+    /* Sample the BIOS clock before heap selection and VM initialization. */
+    py86_startup_begin();
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
     stack_top = (char *)&dummy;
@@ -290,6 +294,7 @@ int main(int argc, char **argv) {
     if (!py86_heap_allocate()) return 2;
     gc_init(heap, (char *)heap + py86_heap_bytes);
     mp_init();
+    py86_startup_initialized();
     py86_console_input = isatty(0);
     py86_test_ctrl_c = getenv("PY86_TEST_CTRLC") != NULL;
     signal(SIGINT, py86_sigint);

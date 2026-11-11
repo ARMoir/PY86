@@ -2,6 +2,11 @@
 import os
 import time
 import datetime
+# Native PY86 startup timestamps use DOS BIOS ticks and are visible to scripts.
+init_ms = time.init_ms()
+startup_ms = time.startup_ms()
+assert 0 <= init_ms <= startup_ms
+print('PASS startup_timing')
 assert os.name == 'dos'
 t = time.localtime()
 assert len(t) == 9

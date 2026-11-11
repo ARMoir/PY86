@@ -287,7 +287,23 @@ REM or: PY86 DEMO.PY
 TYPE PY86.LOG
 ```
 
-The demo prints formatted ASCII sections and PASS/FAIL results for **19
+The demo first shows **native Py86 startup timing**, measured from the
+earliest C `main()` instruction to completion of MicroPython initialization
+(`time.init_ms()`), then to the first executed Python statements
+(`time.startup_ms()`). These values are calculated on the DOS computer
+using the approximately **55 ms BIOS timer** and are printed onscreen and
+saved to `PY86.LOG`. The second figure includes source parsing, compilation
+and initial dispatch; the delta approximates those phases.
+
+**Important:** DOS `COMMAND.COM` and the MZ executable loader operate before
+C `main()`, so this measurement does not include the entire time between
+typing `RUNTEST` and seeing its first output. It does give us a repeatable
+interpreter-startup baseline on the physical V20. Startup does not run on
+every frame or every test, and the timer adds no continuing per-bytecode cost.
+To measure full shell-to-first-output delay, an external DOS launcher timer
+would be required.
+
+The demo also prints formatted ASCII sections and PASS/FAIL results for **19
 feature groups**: integer/big-integer and floating/complex arithmetic,
 Unicode/strings, lists/dicts/sets/tuples/comprehensions, classes,
 generators, closures, exceptions, the `math`, `random`, `datetime`,
