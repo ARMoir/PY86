@@ -61,3 +61,25 @@ Run the converter tests without compiling DOS code:
 
 Future iterations should include a DOSBox smoke-test runner and actual
 heap/time checks for the newly converted modules.
+
+
+## Automated PyPI Roman integration test
+
+The separate converter workflow also runs a real DOSBox integration job,
+not just a host-only conversion test. It downloads the actual roman 5.2 wheel
+from PyPI with integrity verification, converts it using --library-only
+(which omits the argparse CLI), and flattens its single-module library
+to ROMAN.PY for DOS. Constant re.VERBOSE expressions are lowered to a
+compact pattern with simple counted repetitions expanded.
+
+The job builds an unchanged Py86 DOS executable with the pinned MicroPython
+and Open Watcom sources, then executes the converted ROMAN.PY under DOSBox
+configured for 8086. TESTROM.PY verifies representative round trips,
+case-insensitive reads, invalid numerals, bounds and free heap. Failure to
+convert, DOS batch exit failure, any traceback, or a missing PASS marker
+fails the job. Artifacts include the converted ZIP and DOSBox report/logs.
+
+The actual CI job is "Convert roman 5.2 and run with Py86 in DOSBox" in
+.github/workflows/py86pkg.yml. A DOSBox pass does not prove it works on the
+physical Tandy V20. The library-only option intentionally removes CLI
+entrypoints and is appropriate only when consumers use the library API.
