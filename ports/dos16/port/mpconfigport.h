@@ -2,6 +2,11 @@
 #include <stdlib.h>
 #include <time.h>
 /* Native standard-library modules, built into PY86.EXE for fast DOS execution. */
+/* Host-provided CPython-style exit()/quit() builtins.
+ * py86_builtin_exit_obj is declared to modbuiltins.c by compat-exit patch. */
+#define MICROPY_PORT_BUILTINS \
+    { MP_ROM_QSTR(MP_QSTR_exit), MP_ROM_PTR(&py86_builtin_exit_obj) }, \
+    { MP_ROM_QSTR(MP_QSTR_quit), MP_ROM_PTR(&py86_builtin_exit_obj) },
 #define MICROPY_PY_JSON (1)
 #define MICROPY_PY_ERRNO (1)
 #define MICROPY_PY_RE (1)

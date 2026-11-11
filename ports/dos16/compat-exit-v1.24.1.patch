@@ -1,0 +1,13 @@
+diff --git a/py/modbuiltins.c b/py/modbuiltins.c
+--- a/py/modbuiltins.c
++++ b/py/modbuiltins.c
+@@ -33,6 +33,9 @@
+ #include "py/runtime.h"
+ #include "py/builtin.h"
+ #include "py/stream.h"
+ 
++/* Py86 DOS port: native exit/quit callable, exposed via MICROPY_PORT_BUILTINS. */
++extern const mp_obj_fun_builtin_var_t py86_builtin_exit_obj;
++
+ #if MICROPY_PY_BUILTINS_FLOAT
+ #include <math.h>

@@ -18,6 +18,17 @@ extern void py86_set_home_cls(int enabled);
 
 static char *stack_top;
 static void *heap;
+static int py86_exit_requested;
+
+/* CPython-style convenience functions: both signal SystemExit.
+ * This is a C builtin, so it also works when no Python stdlib is installed. */
+static mp_obj_t py86_builtin_exit(size_t n_args, const mp_obj_t *args) {
+    if (n_args == 0) {
+        mp_raise_type(&mp_type_SystemExit);
+    }
+    mp_raise_type_arg(&mp_type_SystemExit, args[0]);
+}
+MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(py86_builtin_exit_obj, 0, 1, py86_builtin_exit);
 
 int mp_hal_stdin_rx_chr(void) {
     int c = getchar();
@@ -92,8 +103,27 @@ static int execute(const char *source, int file, mp_parse_input_kind_t kind) {
         nlr_pop();
         return 0;
     }
-    mp_obj_print_exception(&mp_plat_print, (mp_obj_t)nlr.ret_val);
-    return 1;
+    {
+        mp_obj_t exception = (mp_obj_t)nlr.ret_val;
+        if (mp_obj_exception_match(exception, MP_OBJ_FROM_PTR(&mp_type_SystemExit))) {
+            mp_obj_t value = mp_obj_exception_get_value(exception);
+            py86_exit_requested = 1;
+            /* DOS ERRORLEVEL is an 8-bit process return status. */
+            if (value == mp_const_none) {
+                return 0;
+            }
+            if (mp_obj_is_integer(value)) {
+                return (int)(unsigned char)mp_obj_get_int_truncated(value);
+            }
+            /* Match sys.exit("message"): print the message and exit 1,
+             * rather than treating SystemExit as a Python traceback. */
+            mp_obj_print_helper(&mp_plat_print, value, PRINT_STR);
+            mp_print_str(&mp_plat_print, "\n");
+            return 1;
+        }
+        mp_obj_print_exception(&mp_plat_print, exception);
+        return 1;
+    }
 }
 
 int main(int argc, char **argv) {
@@ -144,7 +174,13 @@ int main(int argc, char **argv) {
                 }
                 strcat(source, "\n"); strcat(source, line);
             }
-            if (source[0]) execute(source, 0, MP_PARSE_SINGLE_INPUT);
+            if (source[0]) {
+                int step_result = execute(source, 0, MP_PARSE_SINGLE_INPUT);
+                if (py86_exit_requested) {
+                    result = step_result;
+                    break;
+                }
+            }
         }
     }
     mp_deinit();

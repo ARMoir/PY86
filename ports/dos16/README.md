@@ -459,3 +459,33 @@ an experimental call-optimized executable; all variants are covered by the
 manually dispatched full benchmark workflows. The documented results are
 emulator-only; the physical 7 MHz V20 is the decisive performance test.
 See `PERFORMANCE.md` for full numbers and workflow links.
+
+
+## Exiting to DOS: exit(), quit(), and sys.exit()
+
+Py86 provides native `exit()` and `quit()` builtins at the interactive
+prompt and inside normal Python scripts. They work without loading external
+Python modules. Both raise `SystemExit`, so Python code can intercept them
+with `except SystemExit` if desired. `import sys; sys.exit(...)` and direct
+`raise SystemExit(...)` use the same host exit handling.
+
+```python
+exit()       # leave REPL or script, DOS ERRORLEVEL 0
+quit()       # same
+exit(7)      # DOS ERRORLEVEL 7
+import sys
+sys.exit(3)  # DOS ERRORLEVEL 3
+```
+
+When uncaught, `SystemExit` terminates the Py86 process cleanly without a
+traceback. No argument, `None` and integer 0 return ERRORLEVEL 0; numeric
+codes use DOS's 8-bit exit status (modulo 256), including negative values.
+A nonnumeric value such as `sys.exit('message')` prints the message and
+returns ERRORLEVEL 1. Other exceptions still print tracebacks and return
+ERRORLEVEL 1 for scripts; the interactive interpreter continues after them.
+Ctrl+Z followed by Enter continues to exit the interactive prompt.
+
+The DOSBox integration suite now tests exit/quit/sys.exit in both scripts and
+the REPL, exact DOS ERRORLEVEL values, no execution after exit, and caught
+SystemExit exceptions. The pinned-source `compat-exit-v1.24.1.patch` only
+exposes the Py86 host function in MicroPython's existing builtins table.

@@ -61,9 +61,22 @@ required = {'SMOKE.OUT': ['PASS smoke'], 'METHOD.OUT': ['PASS methods'],
             'CLOCK.OUT': ['   ~-------------~'],
             'GC.OUT': ['PASS gc_roots'], 'INPUT.OUT': ['PASS input'],
             'REPL.OUT': ['Py86 0.1', '>>> 3', '42', 'PASS repl_recovery', 'ValueError: repl recovery'],
-            'ERROR.OUT': ['ValueError: intentional exit-code test']}
+            'ERROR.OUT': ['ValueError: intentional exit-code test'],
+            'EXITCATCH.OUT': ['PASS exit_can_be_caught'],
+            'EXIT0.OUT': ['PASS exit0_before'],
+            'QUIT0.OUT': ['PASS quit0_before'],
+            'SYSEX0.OUT': ['PASS sys_exit0_before'],
+            'SYSEX7.OUT': ['PASS sys_exit7_before'],
+            'SYSEX9.OUT': ['PASS system_exit9_before'],
+            'SYSEXTXT.OUT': ['PASS sys_exit_message_before', 'PASS custom_exit_message'],
+            'REPLEX.OUT': ['PASS repl_exit_before'],
+            'REPLCODE.OUT': ['PASS repl_exit_code_before']}
 missing = [f + ': ' + token for f, tokens in required.items() for token in tokens
            if token not in logs.get(f, '')]
+if any('FAIL ' in logs.get(name, '') for name in
+       ('EXIT0.OUT', 'QUIT0.OUT', 'SYSEX0.OUT', 'SYSEX7.OUT',
+        'SYSEX9.OUT', 'SYSEXTXT.OUT', 'REPLEX.OUT', 'REPLCODE.OUT')):
+    missing.append('exit tests: Python continued running after SystemExit')
 if logs.get('CLOCK.OUT', '').count('~-------------~') < 2:
     missing.append('CLOCK.OUT: fewer than two rendered clock faces')
 unexpected = [f for f, content in logs.items()

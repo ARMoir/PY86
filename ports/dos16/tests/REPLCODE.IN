@@ -1,0 +1,3 @@
+print("PASS repl_exit_code_before")
+quit(6)
+print("FAIL repl_exit_code_after")

@@ -26,6 +26,31 @@ py86 STRHASH.PY > STRHASH.OUT
 if errorlevel 1 goto fail
 py86 ERROR.PY > ERROR.OUT
 if not errorlevel 1 goto fail
+
+py86 EXITCATCH.PY > EXITCATCH.OUT
+if errorlevel 1 goto fail
+py86 EXIT0.PY > EXIT0.OUT
+if errorlevel 1 goto fail
+py86 QUIT0.PY > QUIT0.OUT
+if errorlevel 1 goto fail
+py86 SYSEX0.PY > SYSEX0.OUT
+if errorlevel 1 goto fail
+py86 SYSEX7.PY > SYSEX7.OUT
+if not errorlevel 7 goto fail
+if errorlevel 8 goto fail
+py86 SYSEX9.PY > SYSEX9.OUT
+if not errorlevel 9 goto fail
+if errorlevel 10 goto fail
+py86 SYSEXTXT.PY > SYSEXTXT.OUT
+if not errorlevel 1 goto fail
+if errorlevel 2 goto fail
+py86 EXNEG.PY > EXNEG.OUT
+if not errorlevel 255 goto fail
+py86 < REPLEX.IN > REPLEX.OUT
+if errorlevel 1 goto fail
+py86 < REPLCODE.IN > REPLCODE.OUT
+if not errorlevel 6 goto fail
+if errorlevel 7 goto fail
 echo PASS > RESULT.TXT
 goto end
 :fail
