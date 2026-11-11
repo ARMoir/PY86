@@ -5,6 +5,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import json
+from gen_clock import generate as generate_clock
 root = Path(__file__).resolve().parent
 p = argparse.ArgumentParser()
 p.add_argument('--dosbox', required=True)
@@ -28,7 +29,19 @@ for f in (root / 'stdlib').glob('*.py'):
         shutil.copy2(f, stage / f.name)
 (stage / 'datetime.py').unlink(missing_ok=True)
 for f in (root / 'tests/pythonclock').glob('*.py'):
-    shutil.copy2(f, stage / f.name)
+    # The original Clock.py would collide with generated CLOCK.PY on DOS.
+    # The original CLKTEST.PY still uses the other unchanged modules.
+    if f.name.lower() != 'clock.py':
+        shutil.copy2(f, stage / f.name)
+generate_clock(stage / 'CLOCK.PY')
+shutil.copy2(root / 'examples' / 'DEMO.PY', stage / 'DEMO.PY')
+(stage / 'ONECLK.PY').write_text(
+    "import clock\n"
+    "f = clock.render(12, 0, 0)\n"
+    "assert f.count('~-------------~') == 2\n"
+    "clock.run(2, 0)\n"
+    "print('PASS optimized_clock')\n",
+    encoding='ascii')
 clock_src = (root / 'tests/pythonclock/Clock.py').read_text()
 if clock_src.count('while True:') != 1:
     raise SystemExit('Unexpected PythonClock main loop; update bounded test generation')
@@ -83,6 +96,8 @@ required = {'SMOKE.OUT': ['PASS smoke'], 'METHOD.OUT': ['PASS methods'],
             'CTRLC.OUT': ['PASS ctrlc_keyboard_interrupt'],
             'CTRLSLP.OUT': ['PASS ctrlc_sleep_interrupt'],
             'CLOCK.OUT': ['   ~-------------~'],
+            'ONECLK.OUT': ['PASS optimized_clock', '   ~-------------~'],
+            'DEMO.OUT': ['PASS feature_demo_complete', 'Tests passed: 19   failed: 0'],
             'GC.OUT': ['PASS gc_roots'],
             'MEMSIZE.OUT': ['PASS heap_gc', 'PASS heap_roots'],
             'MEMAUTO.OUT': ['heap_bytes=', 'mode=auto'],
@@ -125,11 +140,22 @@ if auto.startswith('heap_bytes='):
         missing.append('MEMAUTO.OUT: invalid size')
 if logs.get('CLOCK.OUT', '').count('~-------------~') < 2:
     missing.append('CLOCK.OUT: fewer than two rendered clock faces')
+if logs.get('ONECLK.OUT', '').count('~-------------~') < 4:
+    missing.append('ONECLK.OUT: fewer than two optimized clock frames')
+demo_log = stage / 'PY86.LOG'
+if not demo_log.is_file():
+    missing.append('PY86.LOG: demo did not create its persistent log')
+else:
+    demo_text = demo_log.read_text(errors='replace')
+    if ('PASS feature_demo_complete' not in demo_text or
+            demo_text.count('[PASS]') != 19 or '[FAIL]' in demo_text):
+        missing.append('PY86.LOG: feature demo results missing or incomplete')
 unexpected = [f for f, content in logs.items()
               if ('Traceback' in content and f not in ('REPL.OUT', 'ERROR.OUT'))
               or (f == 'REPL.OUT' and any(x in content for x in ('SyntaxError', 'IndentationError', 'NameError')))]
 report = {'environment': 'DOSBox ' + a.emulator + ' built-in DOS; not physical V20',
           'version': version,
+          'feature_demo_log': demo_log.read_text(errors='replace') if demo_log.is_file() else '',
           'batch_result': result, 'missing': missing, 'unexpected_errors': unexpected, 'logs': logs}
 (root / 'build/test-results.json').write_text(json.dumps(report, indent=2))
 print(json.dumps(report, indent=2))

@@ -42,6 +42,7 @@ jobs:
             ports/dos16/build.py \
             ports/dos16/prepare_source.py \
             ports/dos16/package.py \
+            ports/dos16/gen_clock.py \
             ports/dos16/run_dos.py
 
       - name: Get pinned MicroPython 1.24.1 source
@@ -144,8 +145,11 @@ jobs:
             ports/dos16/bench-test/*.OUT
             ports/dos16/dos-test/*.OUT
             ports/dos16/dos-test/RESULT.TXT
+            ports/dos16/dos-test/DEMO.OUT
+            ports/dos16/dos-test/ONECLK.OUT
+            ports/dos16/dos-test/PY86.LOG
 
-      - name: Package unchanged PythonClock sources and runtime
+      - name: Package optimized single-file clock, feature demo and runtime
         shell: bash
         run: |
           python ports/dos16/package.py
@@ -180,7 +184,9 @@ jobs:
 
           - Built from commit \`${GITHUB_SHA}\` on branch \`${GITHUB_REF_NAME}\`.
           - Source: MicroPython 1.24.1 with Py86 DOS compatibility patches.
-          - Includes PY86.EXE, the original PythonClock sources and RUNCLK.BAT.
+          - Includes PY86.EXE, generated CLOCK.PY, DEMO.PY, RUNCLK.BAT and RUNTEST.BAT.
+          - Original PythonClock sources remain unchanged in the repository.
+          - RUNTEST showcases language features, built-in modules and DOS file I/O; it writes PY86.LOG.
           - The packaged executable prints \`Py86 ${PY86_VERSION}\` with \`PY86 --version\`.
           - The full real-mode DOSBox Staging integration suite passed.
           - DOSBox Staging is not a cycle-accurate 8086 or a real Tandy V20 test.

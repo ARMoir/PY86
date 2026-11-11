@@ -150,10 +150,15 @@ can be reconstructed exactly and reviewed.
 The five original source files from
 [ARMoir/PythonClock](https://github.com/ARMoir/PythonClock), pinned to
 commit `3f1a7040e1e374238f59d9da3087679368c2cb70`, are stored unchanged
-under `tests/pythonclock/`. The DOSBox runner stages them along with Py86's
-`datetime.py` shim and generates a two-tick `CLKTEST.PY` from the original
-`Clock.py` by changing only its loop bound in the disposable DOSBox staging
-folder, leaving the checked-in application source unmodified.
+under `tests/pythonclock/`. The DOSBox runner still tests the original
+implementation by generating a two-tick `CLKTEST.PY` from its `Clock.py` in
+a temporary test folder. The checked-in original sources are never modified.
+
+**The downloadable ZIP now uses a different, optimized clock** assembled into
+one generated `CLOCK.PY`. The packager extracts the original face/hand positions
+from those checked-in sources and verifies the generated mapping against
+the original before packaging. This only changes the bundled release, not
+the original PythonClock code.
 
 Native support is provided by a small, registered DOS-backed `os` module
 (`os.name == "dos"`, `os.system("cls")` via BIOS video; other commands use
@@ -165,13 +170,17 @@ file. It is **not** CPython's full `datetime` module; no timezone support,
 date arithmetic, or `timedelta` are implemented. `time.localtime()` takes no positional argument, and sleep
 is quantized to BIOS ticks (about 55 ms) with a one-hour call limit.
 
-For the unchanged clock, copy `PY86.EXE`, `Clock.py`, `face.py`, `hour.py`,
-`minute.py`, and `second.py` into the same DOS working directory. No
-`datetime.py` is required. Then run:
+For the optimized release clock, extract `PY86.EXE`, `CLOCK.PY`, and
+`RUNCLK.BAT` from the versioned release ZIP into one DOS directory. No
+`datetime.py`, `face.py`, `hour.py`, `minute.py`, or `second.py` is needed.
+Then run:
 
+```bat
+C:\>RUNCLK
 ```
-C:\>PY86 CLOCK.PY
-```
+
+To run the original five-file PythonClock instead, use the unchanged files
+in `tests/pythonclock/` and invoke `PY86 Clock.py` after copying them to DOS.
 
 **Verification:** the current Py86 interpreter builds in GitHub Actions and
 PythonClock has been observed on real Tandy hardware. A new DOSBox integration
@@ -186,16 +195,18 @@ Every push to `tandypy-dos16-port` (and `master` after this port merges) runs
 [the Py86 package workflow](../../.github/workflows/py86-package.yml).
 It checks out the pinned MicroPython v1.24.1 core, downloads the pinned
 **2026-11-01 Open Watcom Linux x64 snapshot**, applies the DOS compatibility
-patch, rebuilds `PY86.EXE`, and packages the unchanged clock files.
+patch, rebuilds `PY86.EXE`, and packages the generated single-file clock
+and feature showcase.
 
 In the **Actions** tab, open the latest **Py86 DOS + PythonClock package** run
 and download the **PY86** artifact. GitHub downloads it as **PY86.zip**.
 The ZIP has everything at its root (no extra directory or nested ZIP):
 
 - `PY86.EXE` (newly compiled 16-bit DOS interpreter)
-- `Clock.py`, `face.py`, `hour.py`, `minute.py`, `second.py` (original,
-  unchanged PythonClock files)
-- `RUNCLK.BAT` (launches the unchanged clock)
+- `CLOCK.PY` (optimized single-file derivative of the original PythonClock)
+- `DEMO.PY` (self-checking feature showcase and diagnostic logger)
+- `RUNCLK.BAT` (starts the optimized clock with flicker-reducing cursor home)
+- `RUNTEST.BAT` (runs the feature demo; writes `PY86.LOG`)
 - `README.TXT` (DOS startup instructions)
 
 Extract these files into one folder on the DOS/CF drive, then run `RUNCLK`
@@ -235,7 +246,7 @@ automatic triggers** and can still be run manually from Actions.
 
 **Installation:** download the newest versioned ZIP from Releases, extract
 the files together to a DOS/CF card, and run `PY86 -V` to confirm the
-embedded version. `RUNCLK` starts the bundled unchanged PythonClock.
+embedded version. `RUNCLK` starts the optimized one-file PythonClock.
 
 ## Flicker-free clock redraw on slow DOS hardware
 
@@ -247,14 +258,54 @@ Use **`RUNCLK.BAT`**, which clears the DOS screen once (`CLS`) and then
 starts `PY86 --home-cls CLOCK.PY`. In this
 opt-in mode, `os.system("cls")` homes the BIOS text cursor to row 0, column 0
 **without clearing the previous clock**. The next full-sized frame overwrites
-the old one; the five original PythonClock source files remain unchanged.
-This improves perceived redraw smoothness but not Python execution speed.
+the old one; the five original PythonClock source files remain unchanged
+in the repository.
+
+The packaged clock also reduces its **own computation**: it runs from a
+single `CLOCK.PY`, uses native `time.localtime()` rather than allocating a
+new `datetime` object every second, generates the ASCII face only once,
+recomputes hour/minute hand overlays only when the minute changes, and uses
+a fast join or a single-character splice for the blinking second marker.
+The generated face and hand positions are checked against all 1,440
+hour/minute combinations from the original functions. This is a design
+optimization, not a measured speedup on physical 7 MHz V20 hardware.
 
 Plain `PY86 CLOCK.PY` retains normal `cls` clearing behavior, so other programs
 aren't affected. Cursor-home mode is intended for fixed-size full-screen text
 programs; differing line lengths or stray output may leave old characters.
 The mode assumes a DOS BIOS-compatible text console.
 
+
+## Full feature showcase and persistent DOS test log
+
+The downloadable release includes **`DEMO.PY`** and **`RUNTEST.BAT`**
+beside `PY86.EXE` and the one-file `CLOCK.PY`. Run from DOS:
+
+```bat
+C:\>RUNTEST
+REM or: PY86 DEMO.PY
+TYPE PY86.LOG
+```
+
+The demo prints formatted ASCII sections and PASS/FAIL results for **19
+feature groups**: integer/big-integer and floating/complex arithmetic,
+Unicode/strings, lists/dicts/sets/tuples/comprehensions, classes,
+generators, closures, exceptions, the `math`, `random`, `datetime`,
+`time`, `re`, `json`, `hashlib`, `errno`, `os` and `gc` modules,
+real DOS file I/O, and script arguments. It also shows BIOS-tick timings,
+DOS date/time and remaining heap. Its detailed transcript is written to
+**`PY86.LOG`** in the current directory and reset at the start of each run.
+
+This is a representative, user-facing demonstration, **not** a claim that
+all CPython APIs are implemented. It exits with a nonzero DOS errorlevel
+if any group fails. The main GitHub Actions DOSBox suite runs both this
+program and a bounded two-frame test of the generated `CLOCK.PY`, requires
+19 PASS entries, and checks that the persistent log was written correctly.
+The original five-file clock integration test remains in CI as well.
+
+The generator is [`gen_clock.py`](gen_clock.py), and the user-facing
+showcase source is [`examples/DEMO.PY`](examples/DEMO.PY). The
+original `tests/pythonclock/` sources remain untouched.
 
 ## Expanded standard-library imports (16-bit DOS)
 

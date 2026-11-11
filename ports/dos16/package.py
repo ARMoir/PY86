@@ -1,12 +1,13 @@
 """Stage a flat DOS-ready runtime and create a standalone PY86.zip.
 
-All five PythonClock files are copied without altering their contents.
-GitHub Actions uploads the staged directory as artifact "PY86", which is
-downloaded by GitHub as PY86.zip (avoiding a nested ZIP inside a ZIP).
+The original PythonClock sources remain untouched in the repository.
+The release includes a generated optimized standalone CLOCK.PY and a
+self-checking DEMO.PY; both are tested under the real DOS interpreter.
 """
 from pathlib import Path
 import shutil
 from zipfile import ZipFile, ZIP_DEFLATED
+from gen_clock import generate as generate_clock
 
 ROOT = Path(__file__).resolve().parent
 DEST = ROOT / "dist"
@@ -15,36 +16,40 @@ ARCHIVE = DEST / "PY86.zip"
 
 INPUTS = {
     "PY86.EXE": ROOT / "build" / "py86.exe",
-    "Clock.py": ROOT / "tests" / "pythonclock" / "Clock.py",
-    "face.py": ROOT / "tests" / "pythonclock" / "face.py",
-    "hour.py": ROOT / "tests" / "pythonclock" / "hour.py",
-    "minute.py": ROOT / "tests" / "pythonclock" / "minute.py",
-    "second.py": ROOT / "tests" / "pythonclock" / "second.py",
+    "CLOCK.PY": ROOT / "build" / "CLOCK.PY",
+    "DEMO.PY": ROOT / "examples" / "DEMO.PY",
 }
 
 VERSION = (ROOT / "build" / "py86-version.txt").read_text(encoding="ascii").strip()
 README = (
     f"Py86 {VERSION}: Python 3 for 16-bit DOS\r\n"
-    "PythonClock (original source) is included.\r\n"
+    "Optimized one-file PythonClock and feature demo included.\r\n"
+    "Original PythonClock files are unchanged in the GitHub repository.\r\n"
     "\r\n"
-    "Copy all files to the same directory on your DOS drive.\r\n"
-    "Run: RUNCLK\r\n"
-    "Or:  PY86 --home-cls CLOCK.PY\r\n"
-    "Start the interactive prompt with: PY86\r\n"
-    "Normal PY86 CLOCK.PY still uses ordinary screen clearing.\r\n"
-    "The --home-cls mode leaves the previous clock visible while\r\n"
-    "Python prepares the next frame, then overwrites it.\r\n"
+    "COPY ALL FILES TO ONE DIRECTORY ON YOUR DOS DRIVE.\r\n"
+    "PY86 -V      Display the version embedded in PY86.EXE\r\n"
+    "RUNCLK       Optimized single-file analog clock (CLOCK.PY)\r\n"
+    "RUNTEST      Feature showcase and self-tests (DEMO.PY)\r\n"
+    "PY86         Start the interactive interpreter\r\n"
+    "PY86 DEMO.PY Run feature tests without the batch script\r\n"
     "\r\n"
-    "Requires a PC-compatible DOS computer with enough conventional RAM.\r\n"
-    "For the clock, set the system date/time correctly in DOS.\r\n"
-    "datetime is built into PY86.EXE; no datetime.py required.\r\n"
+    "The demo shows results on screen and saves PY86.LOG.\r\n"
+    "The log is overwritten on each demo run. Failed tests exit nonzero.\r\n"
+    "The clock uses time.localtime(), cached hands, and fast rendering.\r\n"
+    "RUNCLK uses --home-cls to minimize redraw blanking.\r\n"
+    "Stop the clock with Ctrl+C. The DOS system clock sets its time.\r\n"
+    "Normal PY86 CLOCK.PY uses standard CLS instead.\r\n"
     "\r\n"
-    "Experimental interpreter, based on MicroPython 1.24.1.\r\n"
-    "Not a complete implementation of CPython 3.x.\r\n"
+    "On slow machines, tests may take some time.\r\n"
+    "Requires DOS-compatible conventional memory and an 8086/V20 CPU.\r\n"
+    "Experimental MicroPython 1.24.1 DOS port; not full CPython.\r\n"
 )
 RUNCLK = "@echo off\r\ncls\r\nPY86 --home-cls CLOCK.PY\r\n"
+RUNTEST = "@echo off\r\ncls\r\nPY86 DEMO.PY\r\nif errorlevel 1 echo Demo failed; inspect PY86.LOG\r\n"
+
 
 def main():
+    generate_clock(ROOT / "build" / "CLOCK.PY")
     missing = [str(src) for src in INPUTS.values() if not src.is_file()]
     if missing:
         raise SystemExit("Missing required Py86/clock files:\n" + "\n".join(missing))
@@ -56,6 +61,7 @@ def main():
     for name, src in INPUTS.items():
         shutil.copyfile(src, STAGE / name)
     (STAGE / "RUNCLK.BAT").write_bytes(RUNCLK.encode("ascii"))
+    (STAGE / "RUNTEST.BAT").write_bytes(RUNTEST.encode("ascii"))
     (STAGE / "README.TXT").write_bytes(README.encode("ascii"))
     if ARCHIVE.exists():
         ARCHIVE.unlink()
@@ -63,7 +69,7 @@ def main():
         for file in sorted(STAGE.iterdir()):
             z.write(file, file.name)
     with ZipFile(ARCHIVE) as z:
-        expected = set(INPUTS) | {"RUNCLK.BAT", "README.TXT"}
+        expected = set(INPUTS) | {"RUNCLK.BAT", "RUNTEST.BAT", "README.TXT"}
         if set(z.namelist()) != expected or z.testzip() is not None:
             raise SystemExit("PY86.zip contents failed verification")
     print(f"Packaged {ARCHIVE} ({ARCHIVE.stat().st_size} bytes)")
