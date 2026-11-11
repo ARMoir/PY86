@@ -19,8 +19,8 @@ p.add_argument('--only', default='')
 p.add_argument('--string-mode', choices=('original', 'char-cache', 'lazy-hash', 'both'),
                default='both', help='String optimization (production default: both)')
 p.add_argument('--resume', action='store_true')
-p.add_argument('--image-mode', choices=('speed', 'size', 'compact'), default='speed',
-               help='speed: standard runtime; size: prefer small code; compact: -os/-zm and dead-code elimination')
+p.add_argument('--image-mode', choices=('speed', 'size', 'eliminate', 'compact'), default='speed',
+               help='speed: standard runtime; size: -os; eliminate: -ot/-zm dead-code removal; compact: -os/-zm')
 p.add_argument('--file-readline-mode', choices=('generic', 'fast'), default='generic',
                help='DOS file.readline implementation (default: generic; fast is experimental)')
 p.add_argument('--vm-mode', choices=('baseline', 'fast-decode', 'compiler', 'far128', 'near384', 'combined',
@@ -75,8 +75,8 @@ vm_configs = {
 }
 threshold, vm_optimizations, fast_uint = vm_configs[args.vm_mode]
 flags = ['-q', '-bt=dos', '-0', '-ml', '-za99',
-         '-ot' if args.image_mode == 'speed' else '-os',
-         *(['-zm'] if args.image_mode == 'compact' else []),
+         '-ot' if args.image_mode in ('speed', 'eliminate') else '-os',
+         *(['-zm'] if args.image_mode in ('compact', 'eliminate') else []),
          '-s', '-fpc', '-zp2',
          '-zt=' + str(threshold), *vm_optimizations,
          '-dPY86_VM_FAST_UINT=' + str(fast_uint),
@@ -155,7 +155,7 @@ if failures:
     raise SystemExit('Failed: ' + ','.join(failures))
 
 link = ['system dos', 'option quiet', 'option stack=16384', 'option map=py86.map',
-        *(['option eliminate'] if args.image_mode == 'compact' else []),
+        *(['option eliminate'] if args.image_mode in ('compact', 'eliminate') else []),
         'name py86.exe', *['file ' + x.name for x in objects]]
 (build / 'link.lnk').write_text('\n'.join(link) + '\n')
 print(run(['wlink', '@link.lnk'], build / 'link.log'))
