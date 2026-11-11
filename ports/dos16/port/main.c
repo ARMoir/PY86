@@ -39,6 +39,13 @@ static volatile sig_atomic_t py86_ctrl_c_flag;
 static unsigned short py86_vm_branches;
 static int py86_console_input;
 static int py86_test_ctrl_c;
+static int py86_interrupt_char = 3;
+
+/* Supports MicroPython's micropython.kbd_intr(char) API.  -1 disables
+ * translation, matching the standard port convention. */
+void mp_hal_set_interrupt_char(int c) {
+    py86_interrupt_char = c;
+}
 
 static void py86_sigint(int signal_number) {
     (void)signal_number;
@@ -62,14 +69,14 @@ void py86_vm_hook_loop(void) {
     }
     if (py86_console_input && ((py86_vm_branches & 255U) == 0U)) {
         unsigned short key = _bios_keybrd(_KEYBRD_READY);
-        if ((key & 0xff) == 3) {
+        if (py86_interrupt_char >= 0 && (key & 0xff) == (unsigned)py86_interrupt_char) {
             (void)_bios_keybrd(_KEYBRD_READ);
             py86_ctrl_c_flag = 1;
         }
     }
     if (py86_ctrl_c_flag) {
         py86_ctrl_c_flag = 0;
-        mp_sched_keyboard_interrupt();
+        if (py86_interrupt_char >= 0) mp_sched_keyboard_interrupt();
     }
 }
 
