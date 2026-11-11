@@ -150,6 +150,21 @@ else:
     if ('PASS feature_demo_complete' not in demo_text or
             demo_text.count('[PASS]') != 19 or '[FAIL]' in demo_text):
         missing.append('PY86.LOG: feature demo results missing or incomplete')
+    # The showcase must expose the actual operations and their computed
+    # results, on BOTH the DOS console and in the persistent log.
+    demo_stdout = logs.get('DEMO.OUT', '')
+    for name, content in (('DEMO.OUT', demo_stdout), ('PY86.LOG', demo_text)):
+        if content.count('    >>> ') < 19 or content.count('    output: ') < 19:
+            missing.append(name + ': not enough code-and-result examples')
+        for snippet in ('>>> -7 // 3', 'output: -3',
+                        '>>> math.sqrt(144)', 'output: 12.0',
+                        ">>> re.search(", '>>> json.dumps(data)',
+                        ">>> sha256(b'abc')", '>>> os.getcwd()',
+                        'Tests passed: 19   failed: 0'):
+            if snippet not in content:
+                missing.append(name + ': missing showcase example ' + snippet)
+    if demo_stdout.splitlines() != demo_text.splitlines():
+        missing.append('DEMO.OUT and PY86.LOG transcripts differ')
 unexpected = [f for f, content in logs.items()
               if ('Traceback' in content and f not in ('REPL.OUT', 'ERROR.OUT'))
               or (f == 'REPL.OUT' and any(x in content for x in ('SyntaxError', 'IndentationError', 'NameError')))]
