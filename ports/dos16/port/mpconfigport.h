@@ -12,6 +12,14 @@
 #define MICROPY_PY_HASHLIB_SHA256 (1)
 #define MICROPY_PY_HASHLIB_MD5 (0)
 #define MICROPY_PY_HASHLIB_SHA1 (0)
+/* DOSBox A/B comparison: map cache gave faster dict/globals/instance lookups
+ * at +320 EXE bytes and unchanged 48KB GC heap. Keep attr fast path off. */
+#ifndef MICROPY_OPT_MAP_LOOKUP_CACHE
+#define MICROPY_OPT_MAP_LOOKUP_CACHE (1)
+#endif
+#ifndef MICROPY_OPT_LOAD_ATTR_FAST_PATH
+#define MICROPY_OPT_LOAD_ATTR_FAST_PATH (0)
+#endif
 #define MICROPY_PY_RANDOM (1)
 #define MICROPY_PY_RANDOM_EXTRA_FUNCS (1)
 #define MICROPY_MODULE_BUILTIN_INIT (1)

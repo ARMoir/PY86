@@ -307,3 +307,24 @@ measures the same eight benchmarks in each. It uploads JSON measurements and
 configuration on that same runner. Clock frame results omit its sleep/printing,
 and report time per frame. The experiment only measures simulated 8086 behavior,
 so promising variants should also be tested on the physical NEC V20.
+
+
+### Default optimization decision (DOSBox comparison)
+
+The four-variant DOSBox comparison on the same runner found `map` cache
+increased throughput by roughly 10% for global variables, 16.7% for dict
+lookups, and 33.3% for instance attributes, with just 320 additional EXE bytes
+and no reduction in `gc.mem_free()` in the benchmark. `attr` fast path alone
+was less consistent and adding it to `map` did not improve the measured clock
+frame workload, so the production default is **`map` only**. Results are
+quantized to ~55 ms and are not measurements on a physical NEC V20. The 48 KB
+Python heap remains unchanged.
+
+`python build.py --source ... --watcom ...` produces the recommended map-cache
+version. Use `--lookup-mode off` for an exact unoptimized comparison, or
+`--lookup-mode attr` / `both` for further experiments. CI separately compares
+all four modes and publishes `PY86-lookup-comparison`. The main package job
+publishes the current production metrics in `PY86-perf-production`.
+
+`LOOKUP.PY` asserts that cached dictionary and attribute lookups continue to
+reflect mutations and deletions, and is included in the mandatory DOSBox suite.
