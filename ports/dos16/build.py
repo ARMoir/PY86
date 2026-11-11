@@ -19,8 +19,8 @@ p.add_argument('--only', default='')
 p.add_argument('--string-mode', choices=('original', 'char-cache', 'lazy-hash', 'both'),
                default='both', help='String optimization (production default: both)')
 p.add_argument('--resume', action='store_true')
-p.add_argument('--image-mode', choices=('speed', 'compact'), default='speed',
-               help='speed: standard runtime; compact: -os/-zm and linker dead-code elimination')
+p.add_argument('--image-mode', choices=('speed', 'size', 'compact'), default='speed',
+               help='speed: standard runtime; size: prefer small code; compact: -os/-zm and dead-code elimination')
 p.add_argument('--file-readline-mode', choices=('generic', 'fast'), default='generic',
                help='DOS file.readline implementation (default: generic; fast is experimental)')
 p.add_argument('--vm-mode', choices=('baseline', 'fast-decode', 'compiler', 'far128', 'near384', 'combined',
