@@ -155,6 +155,17 @@ link = ['system dos', 'option quiet', 'option stack=16384', 'option map=py86.map
 print(run(['wlink', '@link.lnk'], build / 'link.log'))
 print('Built', build / 'py86.exe')
 
+# Optional launcher for timing the DOS child MZ executable load itself.
+# It is a small 8086 executable, independent of MicroPython and its heap.
+timer_obj = build / 'start86.obj'
+run(['wcc', '-q', '-bt=dos', '-0', '-ml', '-ot', '-s',
+     '-fo=' + str(timer_obj), ROOT / 'port/start86.c'], build / 'start86.log')
+(build / 'start86.lnk').write_text(
+    'system dos\noption quiet\noption stack=2048\n'
+    'name start86.exe\nfile start86.obj\n', encoding='ascii')
+run(['wlink', '@start86.lnk'], build / 'start86-link.log')
+print('Built', build / 'start86.exe')
+
 
 
 

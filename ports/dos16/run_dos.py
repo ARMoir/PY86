@@ -23,6 +23,7 @@ for f in (root / 'tests').iterdir():
             raise SystemExit('DOS test filename exceeds 8.3: ' + f.name)
         shutil.copy2(f, stage / f.name)
 shutil.copy2(root / 'build/py86.exe', stage / 'PY86.EXE')
+shutil.copy2(root / 'build/start86.exe', stage / 'START86.EXE')
 # Ensure the built-in datetime module is tested without the old shim.
 for f in (root / 'stdlib').glob('*.py'):
     if f.name.lower() != 'datetime.py':
@@ -142,6 +143,16 @@ if logs.get('CLOCK.OUT', '').count('~-------------~') < 2:
     missing.append('CLOCK.OUT: fewer than two rendered clock faces')
 if logs.get('ONECLK.OUT', '').count('~-------------~') < 4:
     missing.append('ONECLK.OUT: fewer than two optimized clock frames')
+full_launch_history = stage / 'LOADTIME.CSV'
+if not full_launch_history.is_file():
+    missing.append('LOADTIME.CSV: no parent-measured DOS load timing')
+else:
+    try:
+        lines = full_launch_history.read_text(errors='replace').splitlines()
+        assert lines[0] == 'date,time,version,full_launch_ms'
+        assert int(lines[-1].split(',')[-1]) >= 0
+    except (AssertionError, ValueError, IndexError):
+        missing.append('LOADTIME.CSV: malformed parent DOS launch measurement')
 demo_log = stage / 'PY86.LOG'
 history_path = stage / 'PY86TIME.CSV'
 if not history_path.is_file():
@@ -166,8 +177,8 @@ else:
             demo_text.count('[PASS]') != 19 or '[FAIL]' in demo_text):
         missing.append('PY86.LOG: feature demo results missing or incomplete')
     # Startup timing must be measured by native PY86 code (not host Python).
-    for label in ('INTERPRETER STARTUP', 'time.init_ms()', 'time.startup_ms()',
-                  'Native VM startup:', 'First Python code:',
+    for label in ('INTERPRETER STARTUP', 'time.init_ms()', 'time.startup_ms()', 'time.launch_ms()',
+                  'Native VM startup:', 'First Python code:', 'Full child launch:',
                   'Source parse/dispatch:', 'EXE loading before C main'):
         if label not in demo_text:
             missing.append('PY86.LOG: missing startup timing ' + label)

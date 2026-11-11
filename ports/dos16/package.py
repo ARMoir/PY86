@@ -16,6 +16,7 @@ ARCHIVE = DEST / "PY86.zip"
 
 INPUTS = {
     "PY86.EXE": ROOT / "build" / "py86.exe",
+    "START86.EXE": ROOT / "build" / "start86.exe",
     "CLOCK.PY": ROOT / "build" / "CLOCK.PY",
     "DEMO.PY": ROOT / "examples" / "DEMO.PY",
 }
@@ -29,11 +30,14 @@ README = (
     "COPY ALL FILES TO ONE DIRECTORY ON YOUR DOS DRIVE.\r\n"
     "PY86 -V      Display the version embedded in PY86.EXE\r\n"
     "RUNCLK       Optimized single-file analog clock (CLOCK.PY)\r\n"
-    "RUNTEST      Feature showcase and self-tests (DEMO.PY)\r\n"
+    "RUNTEST      Feature showcase and startup timer (DEMO.PY)\r\n"
+    "START86 PY86 DEMO.PY   Time full child EXE loading and startup\r\n"
     "PY86         Start the interactive interpreter\r\n"
     "PY86 DEMO.PY Run feature tests without the batch script\r\n"
     "\r\n"
     "The demo shows results on screen and saves PY86.LOG.\r\n"
+    "START86 includes the child EXE load in the startup measurement.\r\n"
+    "History saved in PY86TIME.CSV and LOADTIME.CSV.\r\n"
     "The log is overwritten on each demo run. Failed tests exit nonzero.\r\n"
     "The clock uses time.localtime(), cached hands, and fast rendering.\r\n"
     "RUNCLK uses --home-cls to minimize redraw blanking.\r\n"
@@ -45,7 +49,7 @@ README = (
     "Experimental MicroPython 1.24.1 DOS port; not full CPython.\r\n"
 )
 RUNCLK = "@echo off\r\ncls\r\nPY86 --home-cls CLOCK.PY\r\n"
-RUNTEST = "@echo off\r\ncls\r\nPY86 DEMO.PY\r\nif errorlevel 1 echo Demo failed; inspect PY86.LOG\r\n"
+RUNTEST = "@echo off\r\ncls\r\nSTART86 PY86 DEMO.PY\r\nif errorlevel 1 echo Demo failed; inspect PY86.LOG\r\n"
 
 
 def main():

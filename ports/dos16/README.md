@@ -203,10 +203,11 @@ and download the **PY86** artifact. GitHub downloads it as **PY86.zip**.
 The ZIP has everything at its root (no extra directory or nested ZIP):
 
 - `PY86.EXE` (newly compiled 16-bit DOS interpreter)
+- `START86.EXE` (tiny DOS launcher for full child startup timing)
 - `CLOCK.PY` (optimized single-file derivative of the original PythonClock)
 - `DEMO.PY` (self-checking feature showcase and diagnostic logger)
 - `RUNCLK.BAT` (starts the optimized clock with flicker-reducing cursor home)
-- `RUNTEST.BAT` (runs the feature demo; writes `PY86.LOG`)
+- `RUNTEST.BAT` (uses START86 for startup timing; writes `PY86.LOG`)
 - `README.TXT` (DOS startup instructions)
 
 Extract these files into one folder on the DOS/CF drive, then run `RUNCLK`
@@ -295,13 +296,20 @@ using the approximately **55 ms BIOS timer** and are printed onscreen and
 saved to `PY86.LOG`. The second figure includes source parsing, compilation
 and initial dispatch; the delta approximates those phases.
 
-**Important:** DOS `COMMAND.COM` and the MZ executable loader operate before
-C `main()`, so this measurement does not include the entire time between
-typing `RUNTEST` and seeing its first output. It does give us a repeatable
-interpreter-startup baseline on the physical V20. Startup does not run on
-every frame or every test, and the timer adds no continuing per-bytecode cost.
-To measure full shell-to-first-output delay, an external DOS launcher timer
-would be required.
+The ZIP now includes **`START86.EXE`**, a tiny 8086-compatible DOS
+launcher. `RUNTEST.BAT` launches `PY86 DEMO.PY` through it. START86
+takes a BIOS timestamp **before DOS loads the PY86.EXE child**, passes it
+through the DOS environment, then waits for the child. PY86 exposes it through
+`time.launch_ms()`, measured at the start of the demo script, alongside
+`time.init_ms()` and `time.startup_ms()`. As a result, the showcase can
+compare DOS EXE loading versus VM initialization and source preparation.
+Direct `PY86 DEMO.PY` runs still work, but `time.launch_ms()` returns `None`
+unless START86 was used.
+
+This measures **from START86 just before launching PY86 to the first Python
+statements**. It excludes loading the small START86 program and time spent
+typing the command in COMMAND.COM. The approximately 55 ms BIOS clock
+resolution applies. No timing hook runs per bytecode.
 
 In addition to the full screen transcript in `PY86.LOG`, the showcase appends
 a line to **`PY86TIME.CSV`** on every run. Its columns are
@@ -310,7 +318,10 @@ a line to **`PY86TIME.CSV`** on every run. Its columns are
 for comparing versions and hardware configurations. The version is read from
 the adjacent release `README.TXT` (or `unknown` if unavailable). The
 startup timer is sampled before file I/O; CSV writing does not distort it.
-`PY86.LOG` remains a fresh per-run screen transcript.
+`PY86.LOG` remains a fresh per-run screen transcript. When started via
+`RUNTEST` or `START86 PY86 DEMO.PY`, a separate **`LOADTIME.CSV`**
+records date, time, release version and the full child launch time. Keeping
+the existing PY86TIME.CSV format avoids breaking earlier benchmark histories.
 
 The demo also prints formatted ASCII sections and PASS/FAIL results for **19
 feature groups**: integer/big-integer and floating/complex arithmetic,

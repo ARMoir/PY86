@@ -46,7 +46,7 @@ py86 MODTEST.PY > MODTEST.OUT
 if errorlevel 1 goto fail
 py86 ONECLK.PY > ONECLK.OUT
 if errorlevel 1 goto fail
-py86 DEMO.PY > DEMO.OUT
+start86 py86 DEMO.PY > DEMO.OUT
 if errorlevel 1 goto fail
 py86 LOOKUP.PY > LOOKUP.OUT
 if errorlevel 1 goto fail

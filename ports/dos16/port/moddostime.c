@@ -105,6 +105,20 @@ static unsigned long py86_elapsed_ms(unsigned long begin, unsigned long end) {
     return ticks * 55UL - ticks * 75UL / 1000UL;
 }
 
+/* When START86 is used, the parent BIOS sample includes the MZ load of
+ * the PY86 child process. Direct PY86 execution has no parent timestamp.
+ */
+static mp_obj_t py86_time_launch_ms(void) {
+    const char *stamp = getenv("PY86_LAUNCH_TICKS");
+    char *tail;
+    unsigned long begin;
+    if (stamp == NULL || !*stamp) return mp_const_none;
+    begin = strtoul(stamp, &tail, 10);
+    if (*tail != '\0' || begin >= PY86_TICKS_PER_DAY) return mp_const_none;
+    return mp_obj_new_int((mp_int_t)py86_elapsed_ms(begin, py86_bios_ticks()));
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(py86_time_launch_ms_obj, py86_time_launch_ms);
+
 static mp_obj_t py86_time_init_ms(void) {
     if (!py86_startup_started) return MP_OBJ_NEW_SMALL_INT(0);
     return mp_obj_new_int((mp_int_t)py86_elapsed_ms(
@@ -368,6 +382,7 @@ static const mp_rom_map_elem_t py86_time_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_ticks_diff), MP_ROM_PTR(&py86_time_ticks_diff_obj) },
     { MP_ROM_QSTR(MP_QSTR_init_ms), MP_ROM_PTR(&py86_time_init_ms_obj) },
     { MP_ROM_QSTR(MP_QSTR_startup_ms), MP_ROM_PTR(&py86_time_startup_ms_obj) },
+    { MP_ROM_QSTR(MP_QSTR_launch_ms), MP_ROM_PTR(&py86_time_launch_ms_obj) },
 };
 static MP_DEFINE_CONST_DICT(py86_time_globals, py86_time_globals_table);
 const mp_obj_module_t py86_time_module = {

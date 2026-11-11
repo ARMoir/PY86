@@ -7,6 +7,7 @@ import time
 # DOS MZ loading / COMMAND.COM execution before C main is not included.
 STARTUP_MS = time.startup_ms()
 INIT_MS = time.init_ms()
+LAUNCH_MS = time.launch_ms()
 import sys
 import os
 import gc
@@ -58,6 +59,22 @@ def append_startup_history():
                            timestamp[3], timestamp[4], timestamp[5],
                            version, INIT_MS, STARTUP_MS, STARTUP_MS - INIT_MS))
         show('  Startup history appended to ' + filename)
+        if LAUNCH_MS is not None:
+            # Keep the original CSV schema intact across version upgrades.
+            full_name = 'LOADTIME.CSV'
+            try:
+                with open(full_name, 'r') as previous:
+                    exists = bool(previous.readline())
+            except OSError:
+                exists = False
+            with open(full_name, 'a') as log:
+                if not exists:
+                    log.write('date,time,version,full_launch_ms\n')
+                log.write('%04d-%02d-%02d,%02d:%02d:%02d,%s,%d\n' %
+                          (timestamp[0], timestamp[1], timestamp[2],
+                           timestamp[3], timestamp[4], timestamp[5],
+                           version, LAUNCH_MS))
+            show('  Full DOS launch appended to ' + full_name)
     except OSError as error:
         show('  Startup CSV not writable: ' + str(error))
 
@@ -315,7 +332,15 @@ def main():
         show('  Source parse/dispatch: approx %d ms' %
              (STARTUP_MS - INIT_MS))
         show('  BIOS timer resolution: about 55 ms')
-        show('  Note: EXE loading before C main is not included.')
+        if LAUNCH_MS is None:
+            show('  Full EXE-load timing: unavailable (run RUNTEST)')
+        else:
+            example('time.launch_ms()  # before EXE load to Python', LAUNCH_MS)
+            assert LAUNCH_MS >= STARTUP_MS
+            show('  Full child launch: %d ms' % LAUNCH_MS)
+            show('  DOS EXE load / launcher: approx %d ms' %
+                 (LAUNCH_MS - STARTUP_MS))
+        show('  Native times exclude the DOS loader unless START86 is used.')
         append_startup_history()
         show('')
         banner('LANGUAGE AND OBJECTS')
