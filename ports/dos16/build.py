@@ -26,7 +26,7 @@ env = dict(os.environ, WATCOM=str(wat), INCLUDE=str(wat / 'h'))
 toolbin = wat / ('binnt64' if os.name == 'nt' else 'binl64')
 exesuffix = '.exe' if os.name == 'nt' else ''
 env['PATH'] = str(toolbin) + os.pathsep + env['PATH']
-flags = ['-q', '-bt=dos', '-0', '-ml', '-za99', '-ot', '-s', '-fpc', '-zp2',
+flags = ['-q', '-bt=dos', '-0', '-ml', '-za99', '-ot', '-s', '-fpc', '-zp2', '-zt=256',
          '-i=' + str(ROOT / 'port'), '-i=' + str(src), '-i=' + str(build)]
 
 def run(cmd, output=None):
@@ -48,7 +48,8 @@ mk = (src / 'py/py.mk').read_text()
 core = mk.split('PY_CORE_O_BASENAME = $(addprefix py/,', 1)[1].split(')', 1)[0]
 sources = [src / 'py' / (x + '.c') for x in re.findall(r'(\w+)\.o', core)]
 sources += [ROOT / 'port/main.c', ROOT / 'port/moddostime.c', ROOT / 'port/moddatetime.c',
-            src / 'extmod/modrandom.c',
+            src / 'extmod/modrandom.c', src / 'extmod/modjson.c',
+            src / 'extmod/modre.c', src / 'extmod/modhashlib.c',
             src / 'shared/readline/readline.c']
 
 if not args.only and not args.resume:

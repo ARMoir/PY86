@@ -18,6 +18,8 @@ if errorlevel 1 goto fail
 echo scratch> P86TMP.TXT
 py86 LIBTEST.PY > LIBTEST.OUT
 if errorlevel 1 goto fail
+py86 MODTEST.PY > MODTEST.OUT
+if errorlevel 1 goto fail
 py86 ERROR.PY > ERROR.OUT
 if not errorlevel 1 goto fail
 echo PASS > RESULT.TXT

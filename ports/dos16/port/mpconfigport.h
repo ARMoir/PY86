@@ -1,6 +1,17 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <time.h>
+/* Native standard-library modules, built into PY86.EXE for fast DOS execution. */
+#define MICROPY_PY_JSON (1)
+#define MICROPY_PY_ERRNO (1)
+#define MICROPY_PY_RE (1)
+#define MICROPY_PY_RE_MATCH_GROUPS (1)
+#define MICROPY_PY_RE_MATCH_SPAN_START_END (1)
+#define MICROPY_PY_RE_SUB (1)
+#define MICROPY_PY_HASHLIB (1)
+#define MICROPY_PY_HASHLIB_SHA256 (1)
+#define MICROPY_PY_HASHLIB_MD5 (0)
+#define MICROPY_PY_HASHLIB_SHA1 (0)
 #define MICROPY_PY_RANDOM (1)
 #define MICROPY_PY_RANDOM_EXTRA_FUNCS (1)
 #define MICROPY_MODULE_BUILTIN_INIT (1)

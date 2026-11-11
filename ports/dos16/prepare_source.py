@@ -24,21 +24,23 @@ def main():
     sha = git("rev-parse", "HEAD", cwd=source)
     if sha.returncode or sha.stdout.strip() != PINNED_SHA:
         parser.error("source HEAD must be pinned to v1.24.1 / " + PINNED_SHA)
-    patch = HERE / "compat-v1.24.1.patch"
-    if not patch.is_file():
-        parser.error("missing " + str(patch))
-    if git("apply", "--reverse", "--check", patch, cwd=source).returncode == 0:
-        print("Port patch already applied")
-        return 0
-    check = git("apply", "--check", patch, cwd=source)
-    if check.returncode:
-        sys.stderr.write(check.stderr)
-        parser.error("patch does not apply cleanly; use a clean 1.24.1 checkout")
-    apply = git("apply", patch, cwd=source)
-    if apply.returncode:
-        sys.stderr.write(apply.stderr)
-        return apply.returncode
-    print("Applied 16-bit DOS compatibility patch to " + str(source))
+    # Reproducible, idempotent core and optional-module 16-bit adaptations.
+    for patch_name in ("compat-v1.24.1.patch", "compat-extra-libs-v1.24.1.patch"):
+        patch = HERE / patch_name
+        if not patch.is_file():
+            parser.error("missing " + str(patch))
+        if git("apply", "--reverse", "--check", patch, cwd=source).returncode == 0:
+            print("Already applied: " + patch_name)
+            continue
+        check = git("apply", "--check", patch, cwd=source)
+        if check.returncode:
+            sys.stderr.write(check.stderr)
+            parser.error("patch does not apply cleanly: " + patch_name)
+        apply = git("apply", patch, cwd=source)
+        if apply.returncode:
+            sys.stderr.write(apply.stderr)
+            return apply.returncode
+        print("Applied " + patch_name)
     return 0
 
 

@@ -148,8 +148,9 @@ The ZIP has everything at its root (no extra directory or nested ZIP):
 Extract these files into one folder on the DOS/CF drive, then run `RUNCLK`
 (or `PY86 CLOCK.PY`). The Actions workflow produces a package **artifact only**
 (no release publishing, deployment, or automatic firmware/CF image writing).
-It does not run the DOSBox test suite; the ZIP is a reproducible build
-deliverable, not proof that the clock works on every DOS system.
+Before publishing the ZIP, the GitHub Actions job now runs the DOSBox 8086
+integration suite, including the clock and module tests. This is an emulator
+check, not proof of compatibility with every physical DOS machine.
 
 
 ## Flicker-free clock redraw on slow DOS hardware
@@ -223,3 +224,34 @@ of a second for `microsecond`. Timezone conversion, formatting methods,
 
 The DOSBox `CLOCKAPI.PY` test exercises the built-in constructor and clock
 and the harness explicitly removes stale `datetime.py` from the test stage.
+
+
+## Built-in json, errno, re, and hashlib (16-bit DOS)
+
+The following modules are included directly in PY86.EXE with the other native
+modules (no additional .PY files are required):
+
+- `json`: `loads()` and `dumps()` handle strings, numbers, lists, dicts,
+  booleans, and null. `load()`/`dump()` require a Python stream object;
+  conventional Python `open()` is not yet available in this port.
+- `errno`: DOS-compatible integer error constants such as `ENOENT`,
+  `EEXIST`, and `EINVAL`.
+- `re`: MicroPython's lightweight regex engine with `match`, `search`,
+  `compile`, `sub`, groups, and spans. It is not full CPython regex syntax.
+- `hashlib`: Native SHA-256 with `hashlib.sha256(data)`, `update()`, and
+  `digest()`. SHA-1, MD5, and CPython's full hash API aren't included.
+
+The compatibility patch `compat-extra-libs-v1.24.1.patch` fixes 16-bit
+compiler limitations (flexible array members, JSON C initializers, and the
+SHA-256 32-bit word type) against the pinned MicroPython v1.24.1 source.
+Open Watcom's `-zt=256` flag moves larger static objects into far data to
+keep the 16-bit near-data group below 64 KB without reducing the 48 KB
+Python heap or the existing 16 KB C stack.
+
+The `tests/MODTEST.PY` file verifies native imports, JSON round trips,
+regular expressions and captures, errno constants, and SHA-256 published
+reference digests (including incremental hashing). GitHub Actions now installs
+DOSBox and uses `xvfb-run` to execute the actual 8086 DOS executable.
+Packaging only proceeds after the DOSBox integration suite passes; on
+failure the CI uploads `PY86-test-logs` for debugging. The emulator test is
+not a substitute for testing on the real 7 MHz V20.
