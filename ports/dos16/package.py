@@ -16,7 +16,6 @@ ARCHIVE = DEST / "PY86.zip"
 
 INPUTS = {
     "PY86.EXE": ROOT / "build" / "py86.exe",
-    "PY86P.EXE": ROOT / "build" / "py86p.exe",
     "START86.EXE": ROOT / "build" / "start86.exe",
     "CLOCK.PY": ROOT / "build" / "CLOCK.PY",
     "DEMO.PY": ROOT / "examples" / "DEMO.PY",
@@ -32,8 +31,6 @@ README = (
     "PY86 -V      Display the version embedded in PY86.EXE\r\n"
     "RUNCLK       Optimized single-file analog clock (CLOCK.PY)\r\n"
     "RUNTEST      Run feature showcase directly (DEMO.PY)\r\n"
-    "RUNPCLK      Clock using smaller compressed PY86P.EXE\r\n"
-    "RUNPTEST     Feature showcase using compressed interpreter\r\n"
     "RUNLOAD      Optional timing test via START86 launcher\r\n"
     "START86 PY86 DEMO.PY   Optional full child EXE-load timing\r\n"
     "PY86         Start the interactive interpreter\r\n"
@@ -41,9 +38,6 @@ README = (
     "\r\n"
     "The demo shows results on screen and saves PY86.LOG.\r\n"
     "RUNTEST starts PY86 directly, with no extra DOS loader.\r\n"
-    "PY86P.EXE is UPX-packed for 8086-compatible DOS use.\r\n"
-    "The smaller file may or may not start faster on real hardware.\r\n"
-    "Use RUNPCLK or RUNPTEST to try it without renaming files.\r\n"
     "START86/RUNLOAD are optional timing tools.\r\n"
     "History is saved in PY86TIME.CSV (LOADTIME.CSV with RUNLOAD).\r\n"
     "The log is overwritten on each demo run. Failed tests exit nonzero.\r\n"
@@ -59,8 +53,6 @@ README = (
 RUNCLK = "@echo off\r\ncls\r\nPY86 --home-cls CLOCK.PY\r\n"
 RUNTEST = "@echo off\r\ncls\r\nPY86 DEMO.PY\r\nif errorlevel 1 echo Demo failed; inspect PY86.LOG\r\n"
 RUNLOAD = "@echo off\r\ncls\r\nSTART86 PY86 DEMO.PY\r\nif errorlevel 1 echo Demo failed; inspect PY86.LOG\r\n"
-RUNPCLK = "@echo off\r\ncls\r\nPY86P --home-cls CLOCK.PY\r\n"
-RUNPTEST = "@echo off\r\ncls\r\nPY86P DEMO.PY\r\nif errorlevel 1 echo Demo failed; inspect PY86.LOG\r\n"
 
 
 def main():
@@ -78,8 +70,6 @@ def main():
     (STAGE / "RUNCLK.BAT").write_bytes(RUNCLK.encode("ascii"))
     (STAGE / "RUNTEST.BAT").write_bytes(RUNTEST.encode("ascii"))
     (STAGE / "RUNLOAD.BAT").write_bytes(RUNLOAD.encode("ascii"))
-    (STAGE / "RUNPCLK.BAT").write_bytes(RUNPCLK.encode("ascii"))
-    (STAGE / "RUNPTEST.BAT").write_bytes(RUNPTEST.encode("ascii"))
     (STAGE / "README.TXT").write_bytes(README.encode("ascii"))
     if ARCHIVE.exists():
         ARCHIVE.unlink()
@@ -88,7 +78,7 @@ def main():
             z.write(file, file.name)
     with ZipFile(ARCHIVE) as z:
         expected = set(INPUTS) | {"RUNCLK.BAT", "RUNTEST.BAT", "RUNLOAD.BAT",
-                                  "RUNPCLK.BAT", "RUNPTEST.BAT", "README.TXT"}
+                                  "README.TXT"}
         if set(z.namelist()) != expected or z.testzip() is not None:
             raise SystemExit("PY86.zip contents failed verification")
     print(f"Packaged {ARCHIVE} ({ARCHIVE.stat().st_size} bytes)")

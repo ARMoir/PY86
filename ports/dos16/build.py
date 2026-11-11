@@ -19,8 +19,6 @@ p.add_argument('--only', default='')
 p.add_argument('--string-mode', choices=('original', 'char-cache', 'lazy-hash', 'both'),
                default='both', help='String optimization (production default: both)')
 p.add_argument('--resume', action='store_true')
-p.add_argument('--image-mode', choices=('speed', 'size', 'eliminate', 'compact'), default='speed',
-               help='speed: standard runtime; size: -os; eliminate: -ot/-zm dead-code removal; compact: -os/-zm')
 p.add_argument('--file-readline-mode', choices=('generic', 'fast'), default='generic',
                help='DOS file.readline implementation (default: generic; fast is experimental)')
 p.add_argument('--vm-mode', choices=('baseline', 'fast-decode', 'compiler', 'far128', 'near384', 'combined',
@@ -43,7 +41,7 @@ if not re.fullmatch(r'0\.\d{2}\.(?:0[1-9]|1[0-2])\.\d+', version):
     '#ifndef PY86_VERSION\n#define PY86_VERSION "' + version + '"\n#endif\n',
     encoding='ascii')
 (build / 'py86-version.txt').write_text(version + '\n', encoding='ascii')
-print('Py86 version:', version, 'image mode:', args.image_mode, flush=True)
+print('Py86 version:', version, flush=True)
 env = dict(os.environ, WATCOM=str(wat), INCLUDE=str(wat / 'h'))
 toolbin = wat / ('binnt64' if os.name == 'nt' else 'binl64')
 exesuffix = '.exe' if os.name == 'nt' else ''
@@ -74,10 +72,7 @@ vm_configs = {
     'reopt': (256, ['-oh'], 0),
 }
 threshold, vm_optimizations, fast_uint = vm_configs[args.vm_mode]
-flags = ['-q', '-bt=dos', '-0', '-ml', '-za99',
-         '-ot' if args.image_mode in ('speed', 'eliminate') else '-os',
-         *(['-zm'] if args.image_mode in ('compact', 'eliminate') else []),
-         '-s', '-fpc', '-zp2',
+flags = ['-q', '-bt=dos', '-0', '-ml', '-za99', '-ot', '-s', '-fpc', '-zp2',
          '-zt=' + str(threshold), *vm_optimizations,
          '-dPY86_VM_FAST_UINT=' + str(fast_uint),
          '-dPY86_FAST_READLINE=' + ('1' if args.file_readline_mode == 'fast' else '0'),
@@ -155,7 +150,6 @@ if failures:
     raise SystemExit('Failed: ' + ','.join(failures))
 
 link = ['system dos', 'option quiet', 'option stack=16384', 'option map=py86.map',
-        *(['option eliminate'] if args.image_mode in ('compact', 'eliminate') else []),
         'name py86.exe', *['file ' + x.name for x in objects]]
 (build / 'link.lnk').write_text('\n'.join(link) + '\n')
 print(run(['wlink', '@link.lnk'], build / 'link.log'))

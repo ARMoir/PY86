@@ -203,13 +203,11 @@ and download the **PY86** artifact. GitHub downloads it as **PY86.zip**.
 The ZIP has everything at its root (no extra directory or nested ZIP):
 
 - `PY86.EXE` (standard 16-bit DOS interpreter, preserved unchanged)
-- `PY86P.EXE` (8086-compatible compressed alternative, approximately 41% smaller)
 - `START86.EXE` (tiny DOS launcher for full child startup timing)
 - `CLOCK.PY` (optimized single-file derivative of the original PythonClock)
 - `DEMO.PY` (self-checking feature showcase and diagnostic logger)
 - `RUNCLK.BAT` (starts the optimized clock with flicker-reducing cursor home)
 - `RUNTEST.BAT` (runs PY86 directly with no extra timing launcher)
-- `RUNPCLK.BAT` and `RUNPTEST.BAT` (try smaller compressed interpreter)
 - `RUNLOAD.BAT` (optional detailed startup measurements using START86)
 - `README.TXT` (DOS startup instructions)
 
@@ -280,26 +278,19 @@ programs; differing line lengths or stray output may leave old characters.
 The mode assumes a DOS BIOS-compatible text console.
 
 
-## Smaller executable alternative for 8086 / NEC V20
+## V20 startup: compressed executable experiment
 
-The GitHub Release includes a **size-reduced `PY86P.EXE`** alongside the
-original `PY86.EXE`. It uses UPX's explicitly 8086-compatible DOS
-decompression stub (`--8086 -1`), shrinking the image from around **345 KB
-to 205 KB** while retaining all built-in modules. The packaging workflow
-verifies the compressed EXE against the *full* DOSBox test suite before
-publishing. The baseline EXE remains unchanged as the reliable default.
+Physical Tandy 1000 EX / V20 testing showed **22 seconds** from `RUNCLK`
+to the first clock face with normal `PY86.EXE`, versus **37 seconds** with
+the 8086-compatible UPX-packed interpreter (`RUNPCLK`). The smaller image
+saved disk reads but decompression was substantially slower on this hardware.
+Accordingly, the packed interpreter and its batch files were **removed**
+from new release packages, and its build/CI experiment was retired. The
+standard, uncompressed interpreter remains the only released runtime.
 
-On the Tandy's CF card, try `RUNPCLK` or `RUNPTEST` to launch
-`PY86P.EXE` directly, avoiding any extra launcher process. You can also run
-`PY86P -V` or `PY86P YOURFILE.PY`. The uncompressed `RUNCLK` and `RUNTEST`
-remain the normal launchers.
-
-**Tradeoff:** The packed EXE reduces disk I/O but must decompress using the
-V20 CPU. In DOSBox, an earlier tested packed build started roughly 0.27 s
-slower than the uncompressed original. The actual XT-IDE CF performance
-and available conventional memory may change that result. Try the packed
-version on the real machine before deciding to make it the default.
-A smaller file is not automatically a faster startup.
+This result is specific to the tested Tandy 1000 EX, XT-IDE CF setup and
+clock workload. The slower packed build should not be recommended for V20
+startup optimization; future work can focus on source parsing or loading.
 
 ## Full feature showcase and persistent DOS test log
 
