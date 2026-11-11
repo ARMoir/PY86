@@ -16,6 +16,8 @@ p.add_argument('--source', type=Path, required=True)
 p.add_argument('--watcom', type=Path, required=True)
 p.add_argument('--only', default='')
 p.add_argument('--resume', action='store_true')
+p.add_argument('--lookup-mode', choices=('off', 'map', 'attr', 'both'),
+               default='off', help='Experimental MicroPython lookup optimizations')
 args = p.parse_args()
 src = args.source.resolve()
 wat = args.watcom.resolve()
@@ -26,7 +28,15 @@ env = dict(os.environ, WATCOM=str(wat), INCLUDE=str(wat / 'h'))
 toolbin = wat / ('binnt64' if os.name == 'nt' else 'binl64')
 exesuffix = '.exe' if os.name == 'nt' else ''
 env['PATH'] = str(toolbin) + os.pathsep + env['PATH']
+lookup_flags = {
+    'off': [],
+    'map': ['-dMICROPY_OPT_MAP_LOOKUP_CACHE=1'],
+    'attr': ['-dMICROPY_OPT_LOAD_ATTR_FAST_PATH=1'],
+    'both': ['-dMICROPY_OPT_MAP_LOOKUP_CACHE=1',
+             '-dMICROPY_OPT_LOAD_ATTR_FAST_PATH=1'],
+}
 flags = ['-q', '-bt=dos', '-0', '-ml', '-za99', '-ot', '-s', '-fpc', '-zp2', '-zt=256',
+         *lookup_flags[args.lookup_mode],
          '-i=' + str(ROOT / 'port'), '-i=' + str(src), '-i=' + str(build)]
 
 def run(cmd, output=None):

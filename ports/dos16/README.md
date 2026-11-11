@@ -289,3 +289,21 @@ figures. Run the same scripts on real hardware for definitive speed results.
 The frame benchmark launches three fresh Py86 processes and renders two
 frames per process. This avoids invalidating measurements by accumulating
 long-lived allocations in the 48 KB interpreter heap during calibration.
+
+
+## Lookup optimization comparison (experimental)
+
+`build.py --lookup-mode` supports `off` (the default production build),
+`map` (MicroPython's map lookup cache), `attr` (instance attribute fast path),
+and `both`. These flags are applied at C compilation time, not by loading
+modules dynamically. Default `PY86.EXE` remains unchanged until measured
+correctness and speed justify enabling them.
+
+The `Py86 lookup optimization experiment` GitHub Actions workflow builds
+all four configurations using identical pinned MicroPython/Open Watcom versions
+and DOSBox CPU settings, runs the existing correctness tests on each, and
+measures the same eight benchmarks in each. It uploads JSON measurements and
+`lookup-comparison.md`, with speedup percentages compared to the `off`
+configuration on that same runner. Clock frame results omit its sleep/printing,
+and report time per frame. The experiment only measures simulated 8086 behavior,
+so promising variants should also be tested on the physical NEC V20.
