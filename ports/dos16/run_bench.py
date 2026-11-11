@@ -19,6 +19,9 @@ def main():
     p.add_argument("--mode", default="baseline")
     p.add_argument("--timeout", type=int, default=220)
     p.add_argument("--vm-tests", action="store_true", help="Include dispatch microbenchmarks")
+    p.add_argument("--heap", default="auto",
+                   choices=("auto", "24000", "32000", "48000", "60000"),
+                   help="PY86_HEAP used for comparison (default: auto)")
     args = p.parse_args()
 
     build = ROOT / "build"
@@ -31,8 +34,15 @@ def main():
     shutil.copy2(build / "py86.exe", stage / "PY86.EXE")
     vm_commands = (b"PY86 VMTEST.PY > VMTEST.OUT\r\n"
                    b"if errorlevel 1 goto fail\r\n") if args.vm_tests else b""
+    # Set the heap for the entire DOS batch, including --heap-info and
+    # the individual independent Py86 benchmark processes.
+    heap_cmd = ("set PY86_HEAP=" + ("" if args.heap == "auto" else args.heap) +
+                "\r\nset PY86_HEAP_MAX=\r\n").encode("ascii")
     (stage / "BENCH.BAT").write_bytes(
-        b"@echo off\r\n"
+        b"@echo off\r\n" +
+        heap_cmd +
+        b"PY86 --heap-info > HEAPINFO.OUT\r\n"
+        b"if errorlevel 1 goto fail\r\n"
         b"PY86 BENCH1.PY > BENCH1.OUT\r\n"
         b"if errorlevel 1 goto fail\r\n"
         + vm_commands +
@@ -47,7 +57,8 @@ def main():
         b":fail\r\necho FAIL > BENCH.RES\r\n"
         b":done\r\n"
     )
-    for name in ("BENCH1.OUT", "VMTEST.OUT", "FRAMEBEN.OUT", "BENCH.RES"):
+    for name in ("BENCH1.OUT", "VMTEST.OUT", "FRAMEBEN.OUT",
+                 "HEAPINFO.OUT", "BENCH.RES"):
         (stage / name).unlink(missing_ok=True)
 
     conf = build / "bench-dosbox.conf"
@@ -114,12 +125,32 @@ def main():
         print(json.dumps({"status": result, "raw": logs, "summary": summary}, indent=2))
         raise SystemExit("Py86 benchmark failed")
 
+    info = (stage / "HEAPINFO.OUT").read_text().strip() if (stage / "HEAPINFO.OUT").exists() else ""
+    info_fields = {}
+    for field in info.split():
+        if "=" in field:
+            k, v = field.split("=", 1)
+            info_fields[k] = v
+    try:
+        heap_bytes = int(info_fields["heap_bytes"])
+        gc_total = int(info_fields["gc_total"])
+        gc_free = int(info_fields["gc_free"])
+    except (KeyError, ValueError):
+        raise SystemExit("Bad PY86 --heap-info output: " + info)
+    if not (24000 <= heap_bytes <= 60000):
+        raise SystemExit("Selected heap outside expected 16-bit single-segment bounds")
+    if args.heap != "auto" and heap_bytes != int(args.heap):
+        raise SystemExit("Requested heap size was not selected")
     report = {
         "mode": args.mode,
         "environment": "DOSBox 0.74, 8086, fixed 20000 cycles, BIOS ~55ms tick",
         "disclaimer": "Relative DOSBox results, not physical V20 clock speed",
         "executable_bytes": (build / "py86.exe").stat().st_size,
-        "python_heap_bytes": 48000,
+        "heap_request": args.heap,
+        "python_heap_bytes": heap_bytes,
+        "gc_total_bytes": gc_total,
+        "gc_free_on_startup": gc_free,
+        "heap_info": info_fields,
         "vm_tests": args.vm_tests,
         "memory": memories,
         "summary": summary,
