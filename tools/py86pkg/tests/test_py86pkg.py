@@ -129,6 +129,34 @@ class ConverterTests(unittest.TestCase):
         self.assertEqual(report["requires_dist"], ["requests>=2"])
         self.assertIn("dependencies", {x["code"] for x in report["issues"]})
 
+
+    def test_library_only_roman_shape(self):
+        code = (b"import argparse\nimport re\n"
+                b"pattern = re.compile(' A{0,4} # comment\\n', re.VERBOSE)\n"
+                b"def toRoman(n: int) -> str:\n    return 'A'\n"
+                b"def parse_args():\n    return argparse.ArgumentParser()\n"
+                b"def main():\n    return parse_args()\n"
+                b"if __name__ == '__main__':\n    main()\n")
+        with tempfile.TemporaryDirectory() as temp:
+            dest = Path(temp) / "roman.zip"
+            result = pkg.convert({
+                PurePosixPath("roman/__init__.py"): code,
+                PurePosixPath("roman/__main__.py"): b"from roman import main\nmain()\n",
+            }, self.profile, dest, "roman", "5.2", library_only=True)
+            self.assertEqual(result["status"], "candidate_untested_on_dos")
+            with zipfile.ZipFile(dest) as archive:
+                self.assertEqual(set(archive.namelist()),
+                                 {"roman.py", "REPORT.JSON", "README.TXT"})
+                source = archive.read("roman.py").decode()
+            self.assertNotIn("argparse", source)
+            self.assertNotIn("parse_args", source)
+            self.assertNotIn("re.VERBOSE", source)
+            namespace = {}
+            exec(compile(source, "roman.py", "exec"), namespace)
+            self.assertTrue(namespace["pattern"].fullmatch("AAA"))
+            self.assertFalse(namespace["pattern"].fullmatch("AAAAA"))
+            self.assertEqual(result["transformations"]["verbose_regex"], 1)
+
     def test_no_parseable_file_rejected(self):
         with tempfile.TemporaryDirectory() as temp:
             with self.assertRaisesRegex(ValueError, "No parseable"):
