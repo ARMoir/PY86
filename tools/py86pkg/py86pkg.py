@@ -21,6 +21,8 @@ from pathlib import Path, PurePosixPath
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_PROFILE = HERE / "profiles" / "v20.json"
+if not DEFAULT_PROFILE.is_file():
+    DEFAULT_PROFILE = Path(sys.prefix) / "share" / "py86pkg" / "profiles" / "v20.json"
 MAX_DOWNLOAD = 24 * 1024 * 1024
 MAX_SOURCE = 2 * 1024 * 1024
 MAX_FILES = 4000
@@ -168,7 +170,8 @@ def normalize_sources(entries):
         return {}
     parts = [p.parts for p in entries]
     # Strip the usual sdist release directory only when it wraps every file.
-    strip_root = all(len(x) > 1 and x[0] == parts[0][0] for x in parts)
+    strip_root = (all(len(x) > 1 and x[0] == parts[0][0] for x in parts)
+                  and bool(re.search(r"[-_]v?\d", parts[0][0])))
     normalized = {}
     for p, data in entries.items():
         path = PurePosixPath(*p.parts[1:]) if strip_root else p
@@ -333,7 +336,8 @@ def transform(data, path, strip_docstrings):
     for error in changes.errors:
         problems.append(issue(path, "error", "unsupported_syntax", error))
     for node in ast.walk(tree):
-        if isinstance(node, (ast.Match, ast.TryStar, ast.NamedExpr)):
+        if isinstance(node, tuple(getattr(ast, n) for n in
+                                  ("Match", "TryStar", "NamedExpr") if hasattr(ast, n))):
             problems.append(issue(path, "error", "unsupported_syntax",
                                   type(node).__name__ + " requires verification/porting"))
         if hasattr(ast, "TypeAlias") and isinstance(node, ast.TypeAlias):
