@@ -105,15 +105,16 @@ folder, leaving the checked-in application source unmodified.
 Native support is provided by a small, registered DOS-backed `os` module
 (`os.name == "dos"`, `os.system("cls")` via BIOS video; other commands use
 COMMAND.COM through the C runtime) and `time` module (`sleep()` via BIOS timer
-and `localtime()` via DOS date/time). `stdlib/datetime.py` supplies the subset
-needed for `datetime.datetime.now()` and basic date/time fields. It is **not**
-CPython's full `datetime` module; no timezone, date arithmetic, or `timedelta`
-are implemented. `time.localtime()` takes no positional argument, and sleep
+and `localtime()` via DOS date/time). A native, registered `datetime` module (`port/moddatetime.c`) supplies
+`datetime.datetime.now()`, `today()`, a validated constructor, and the basic
+date/time fields. It is built into `PY86.EXE` rather than loaded from a `.PY`
+file. It is **not** CPython's full `datetime` module; no timezone support,
+date arithmetic, or `timedelta` are implemented. `time.localtime()` takes no positional argument, and sleep
 is quantized to BIOS ticks (about 55 ms) with a one-hour call limit.
 
-For the unchanged clock, copy `PY86.EXE`, `datetime.py` from `build/`, and
-`Clock.py`, `face.py`, `hour.py`, `minute.py`, and `second.py` from PythonClock
-into the same DOS working directory, then run:
+For the unchanged clock, copy `PY86.EXE`, `Clock.py`, `face.py`, `hour.py`,
+`minute.py`, and `second.py` into the same DOS working directory. No
+`datetime.py` is required. Then run:
 
 ```
 C:\>PY86 CLOCK.PY
@@ -139,7 +140,6 @@ and download the **PY86** artifact. GitHub downloads it as **PY86.zip**.
 The ZIP has everything at its root (no extra directory or nested ZIP):
 
 - `PY86.EXE` (newly compiled 16-bit DOS interpreter)
-- `datetime.py` (DOS date/time compatibility shim)
 - `Clock.py`, `face.py`, `hour.py`, `minute.py`, `second.py` (original,
   unchanged PythonClock files)
 - `RUNCLK.BAT` (launches the unchanged clock)
@@ -208,3 +208,18 @@ mathematical functions, and BIOS-tick sleeps. The DOSBox test runner includes
 it, but the automatic GitHub Actions workflow remains **build/package only**.
 A successful CI build is not a claim that these APIs have been exercised on
 the physical Tandy.
+
+
+## Built-in `datetime` (no shim file)
+
+Py86 registers a small **native C `datetime` module**. The PythonClock source
+remains exactly as originally written: `import datetime` and
+`datetime.datetime.now()` work without `datetime.py` on the DOS drive.
+It also provides `datetime.datetime.today()`, and a constructor supporting
+`year, month, day, hour, minute, second, microsecond` with positional or
+keyword arguments. Objects have read-only fields; DOS time supplies hundredths
+of a second for `microsecond`. Timezone conversion, formatting methods,
+`timedelta`, and date arithmetic are not yet implemented.
+
+The DOSBox `CLOCKAPI.PY` test exercises the built-in constructor and clock
+and the harness explicitly removes stale `datetime.py` from the test stage.

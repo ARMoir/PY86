@@ -16,8 +16,11 @@ for f in (root / 'tests').iterdir():
     if f.is_file():
         shutil.copy2(f, stage / f.name)
 shutil.copy2(root / 'build/py86.exe', stage / 'PY86.EXE')
+# Ensure the built-in datetime module is tested without the old shim.
 for f in (root / 'stdlib').glob('*.py'):
-    shutil.copy2(f, stage / f.name)
+    if f.name.lower() != 'datetime.py':
+        shutil.copy2(f, stage / f.name)
+(stage / 'datetime.py').unlink(missing_ok=True)
 for f in (root / 'tests/pythonclock').glob('*.py'):
     shutil.copy2(f, stage / f.name)
 clock_src = (root / 'tests/pythonclock/Clock.py').read_text()
@@ -49,7 +52,7 @@ required = {'SMOKE.OUT': ['PASS smoke'], 'METHOD.OUT': ['PASS methods'],
             'CORE.OUT': ['PASS numeric', 'PASS unicode', 'PASS control', 'PASS functions',
                          'PASS exceptions', 'PASS containers', 'PASS classes_generators',
                          'PASS imports', 'PASS core_complete'],
-            'CLOCKAPI.OUT': ['PASS dos_datetime', 'PASS dos_sleep', 'PASS dos_cls'],
+            'CLOCKAPI.OUT': ['PASS datetime_builtin', 'PASS dos_datetime', 'PASS dos_sleep', 'PASS dos_cls'],
             'LIBTEST.OUT': ['PASS math', 'PASS random', 'PASS os', 'PASS time'],
             'CLOCK.OUT': ['   ~-------------~'],
             'GC.OUT': ['PASS gc_roots'], 'INPUT.OUT': ['PASS input'],

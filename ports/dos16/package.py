@@ -15,7 +15,6 @@ ARCHIVE = DEST / "PY86.zip"
 
 INPUTS = {
     "PY86.EXE": ROOT / "build" / "py86.exe",
-    "datetime.py": ROOT / "stdlib" / "datetime.py",
     "Clock.py": ROOT / "tests" / "pythonclock" / "Clock.py",
     "face.py": ROOT / "tests" / "pythonclock" / "face.py",
     "hour.py": ROOT / "tests" / "pythonclock" / "hour.py",
@@ -37,7 +36,7 @@ README = (
     "\r\n"
     "Requires a PC-compatible DOS computer with enough conventional RAM.\r\n"
     "For the clock, set the system date/time correctly in DOS.\r\n"
-    "The datetime.py shim must remain alongside the other files.\r\n"
+    "datetime is built into PY86.EXE; no datetime.py required.\r\n"
     "\r\n"
     "Experimental interpreter, based on MicroPython 1.24.1.\r\n"
     "Not a complete implementation of CPython 3.x.\r\n"
