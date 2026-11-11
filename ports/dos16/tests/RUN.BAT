@@ -7,6 +7,30 @@ py86 CORE.PY > CORE.OUT
 if errorlevel 1 goto fail
 py86 GC.PY > GC.OUT
 if errorlevel 1 goto fail
+set PY86_HEAP=48000
+py86 --heap-info > MEM48.OUT
+if errorlevel 1 goto fail
+set PY86_HEAP=24000
+py86 --heap-info > MEM24.OUT
+if errorlevel 1 goto fail
+set PY86_HEAP=60000
+py86 --heap-info > MEM60.OUT
+if errorlevel 1 goto fail
+set PY86_HEAP=
+set PY86_HEAP_MAX=32000
+py86 --heap-info > MEMCAP.OUT
+if errorlevel 1 goto fail
+set PY86_HEAP_MAX=
+py86 --heap-info > MEMAUTO.OUT
+if errorlevel 1 goto fail
+py86 MEMSIZE.PY > MEMSIZE.OUT
+if errorlevel 1 goto fail
+set PY86_HEAP=72000
+py86 --heap-info > MEMBAD.OUT
+if not errorlevel 2 goto fail
+if errorlevel 3 goto fail
+set PY86_HEAP=
+
 py86 INPUT.PY < INPUT.IN > INPUT.OUT
 if errorlevel 1 goto fail
 py86 < REPL.IN > REPL.OUT

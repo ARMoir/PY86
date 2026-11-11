@@ -564,3 +564,48 @@ the command string from `sys.argv`, and passes the subsequent arguments.
 Running scripts retains `sys.argv[0]` as the script filename. The interactive
 REPL sets it to an empty string. A missing `-c` command returns DOS
 `ERRORLEVEL 2`. All options retain `--home-cls` compatibility.
+
+
+## Automatic conventional-memory-aware Python heap sizing
+
+Py86 now attempts a larger single-segment Python heap at startup, starting
+at **60,000 bytes** and backing down through 56,000, 52,000, 48,000,
+44,000, 40,000, 36,000, 32,000, 28,000 and **24,000 bytes** if a suitable
+allocation is not available. This uses the Open Watcom large-model *far*
+heap, not a 64 KB static near-DGROUP allocation. Each candidate is checked
+against the 16-bit far-pointer offset boundary (guarded at 0xFFF0) and must
+leave a testable 32 KB contiguous native allocation for DOS and source I/O.
+All heap allocations still remain in one 64 KB-addressable segment.
+
+The default mode is automatic, and prints no additional text when running
+a normal Python script. From DOS:
+
+```bat
+PY86 --heap-info
+REM Example on a machine with enough free memory:
+REM heap_bytes=60000 gc_total=... gc_free=... mode=auto
+SET PY86_HEAP=48000
+PY86 --heap-info
+SET PY86_HEAP=
+SET PY86_HEAP_MAX=32000
+PY86 --heap-info
+SET PY86_HEAP_MAX=
+```
+
+`PY86_HEAP` requests an exact heap size, `PY86_HEAP_MAX` caps automatic
+selection. Accepted numeric values are 24,000 through 60,000, multiples
+of 16. Invalid or unallocatable sizes return DOS `ERRORLEVEL 2`.
+Python still uses `gc.mem_free()` / `gc.mem_alloc()` to inspect usable
+GC memory. `heap_bytes` is the raw far allocation including MicroPython's
+allocation bitmap; `gc_total` is usable GC pool after its metadata.
+The 32 KB native headroom probe is freed after selection and does not
+reserve that amount against later DOS allocations.
+
+This is **not** a multi-segment Python heap, does not consume EMS/XMS, and
+cannot give a 286 with more RAM a >64 KB Python heap. Enlarging beyond
+60 KB requires first validating split-GC root tracking and segmented
+pointer arithmetic, then a separate multi-block allocator design.
+
+The DOSBox integration suite checks forced 24K, 48K and 60K modes,
+32K auto caps, invalid input, GC allocations and roots. The real V20
+should still be used to verify native-memory margins and performance.

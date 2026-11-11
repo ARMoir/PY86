@@ -76,7 +76,14 @@ required = {'SMOKE.OUT': ['PASS smoke'], 'METHOD.OUT': ['PASS methods'],
             'CTRLC.OUT': ['PASS ctrlc_keyboard_interrupt'],
             'CTRLSLP.OUT': ['PASS ctrlc_sleep_interrupt'],
             'CLOCK.OUT': ['   ~-------------~'],
-            'GC.OUT': ['PASS gc_roots'], 'INPUT.OUT': ['PASS input'],
+            'GC.OUT': ['PASS gc_roots'],
+            'MEMSIZE.OUT': ['PASS heap_gc', 'PASS heap_roots'],
+            'MEMAUTO.OUT': ['heap_bytes=', 'mode=auto'],
+            'MEM48.OUT': ['heap_bytes=48000', 'mode=fixed'],
+            'MEM24.OUT': ['heap_bytes=24000', 'mode=fixed'],
+            'MEM60.OUT': ['heap_bytes=60000', 'mode=fixed'],
+            'MEMCAP.OUT': ['heap_bytes=32000', 'mode=auto'],
+            'INPUT.OUT': ['PASS input'],
             'REPL.OUT': ['Py86 0.1', '>>> 3', '42', 'PASS repl_recovery', 'ValueError: repl recovery'],
             'ERROR.OUT': ['ValueError: intentional exit-code test'],
             'EXCATCH.OUT': ['PASS exit_can_be_caught'],
@@ -94,6 +101,21 @@ if any('FAIL ' in logs.get(name, '') for name in
        ('EXIT0.OUT', 'QUIT0.OUT', 'SYSEX0.OUT', 'SYSEX7.OUT',
         'SYSEX9.OUT', 'SYSEXTXT.OUT', 'REPLEX.OUT', 'REPLCODE.OUT')):
     missing.append('exit tests: Python continued running after SystemExit')
+# Verify native DOS heap selection independently of Python-object memory
+# and reject forged/success-looking output from a failing startup.
+for name, target in (('MEM48.OUT', 48000), ('MEM24.OUT', 24000),
+                     ('MEM60.OUT', 60000), ('MEMCAP.OUT', 32000)):
+    line = logs.get(name, '').strip()
+    if not line.startswith('heap_bytes=' + str(target) + ' '):
+        missing.append(name + ': wrong selected heap')
+auto = logs.get('MEMAUTO.OUT', '').strip()
+if auto.startswith('heap_bytes='):
+    try:
+        amount = int(auto.split()[0].split('=', 1)[1])
+        if not (24000 <= amount <= 60000):
+            missing.append('MEMAUTO.OUT: size outside single-segment bounds')
+    except (IndexError, ValueError):
+        missing.append('MEMAUTO.OUT: invalid size')
 if logs.get('CLOCK.OUT', '').count('~-------------~') < 2:
     missing.append('CLOCK.OUT: fewer than two rendered clock faces')
 unexpected = [f for f, content in logs.items()

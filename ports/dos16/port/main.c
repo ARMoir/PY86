@@ -7,6 +7,7 @@
 #include <signal.h>
 #include <dos.h>
 #include <bios.h>
+#include <i86.h>
 #include <io.h>
 #include "py/compile.h"
 #include "py/runtime.h"
@@ -23,6 +24,93 @@ extern void py86_set_home_cls(int enabled);
 static char *stack_top;
 static void *heap;
 static int py86_exit_requested;
+
+/* Single-segment GC heap selection.  Open Watcom -ml malloc() uses its
+ * far heap, but ordinary far pointers cannot wrap their 16-bit offsets.
+ * The larger multi-segment case needs a separate split-GC project.
+ *
+ * Auto tries from 60,000 down to 24,000 bytes.  Verify that each candidate
+ * fits before offset 0xfff0 and that a separate 32 KiB native malloc still
+ * succeeds (e.g. when reading/parsing Python source or DOS files).
+ *
+ * PY86_HEAP=48000 requests one exact heap size and errors if unavailable.
+ * PY86_HEAP_MAX=32000 caps automatic selection for small machines/tests.
+ */
+#define PY86_HEAP_MIN 24000U
+#define PY86_HEAP_MAX 60000U
+#define PY86_HEAP_STEP 4000U
+#define PY86_NATIVE_HEADROOM 32768U
+static unsigned py86_heap_bytes;
+static int py86_heap_fixed;
+
+static int py86_heap_parse(const char *s, unsigned *value) {
+    char *end;
+    unsigned long n;
+    if (s == NULL || s[0] == '\0') return 0;
+    n = strtoul(s, &end, 10);
+    if (*end != '\0' || end == s ||
+        n < PY86_HEAP_MIN || n > PY86_HEAP_MAX ||
+        ((unsigned)n & 15U) != 0) {
+        return -1;
+    }
+    *value = (unsigned)n;
+    return 1;
+}
+
+static int py86_heap_try(unsigned bytes) {
+    void *p;
+    void *reserve;
+    /* One contiguous object and one 16-bit far-pointer address space. */
+    p = malloc(bytes);
+    if (p == NULL) return 0;
+    if ((unsigned long)FP_OFF(p) + (unsigned long)bytes > 65520UL) {
+        free(p);
+        return 0;
+    }
+    reserve = malloc(PY86_NATIVE_HEADROOM);
+    if (reserve == NULL) {
+        free(p);
+        return 0;
+    }
+    free(reserve);
+    heap = p;
+    py86_heap_bytes = bytes;
+    return 1;
+}
+
+static int py86_heap_allocate(void) {
+    const char *setting = getenv("PY86_HEAP");
+    const char *cap_setting = getenv("PY86_HEAP_MAX");
+    unsigned requested = 0;
+    unsigned ceiling = PY86_HEAP_MAX;
+    unsigned candidate;
+    int parse;
+
+    parse = py86_heap_parse(cap_setting, &ceiling);
+    if (parse < 0) {
+        fputs("PY86_HEAP_MAX requires 24000..60000 bytes, multiple of 16\n", stderr);
+        return 0;
+    }
+    if (setting && setting[0] && strcmp(setting, "auto") != 0) {
+        parse = py86_heap_parse(setting, &requested);
+        if (parse != 1) {
+            fputs("PY86_HEAP requires auto or 24000..60000 bytes, multiple of 16\n", stderr);
+            return 0;
+        }
+        py86_heap_fixed = 1;
+        if (py86_heap_try(requested)) return 1;
+        fprintf(stderr, "Cannot allocate %u-byte Python heap with native headroom\n", requested);
+        return 0;
+    }
+    for (candidate = PY86_HEAP_MAX; candidate >= PY86_HEAP_MIN;
+         candidate -= PY86_HEAP_STEP) {
+        if (candidate <= ceiling && py86_heap_try(candidate)) {
+            return 1;
+        }
+    }
+    fputs("Cannot allocate a safe 24000-byte Python heap with native headroom\n", stderr);
+    return 0;
+}
 
 /* Keyboard interrupt support: SIGINT is deferred to safe VM boundaries. */
 const char py86_help_text[] =
@@ -198,9 +286,8 @@ int main(int argc, char **argv) {
     stack_top = (char *)&dummy;
     mp_stack_ctrl_init();
     mp_stack_set_limit(10000);
-    heap = malloc(48000U);
-    if (!heap) { fputs("Cannot allocate 48000-byte Python heap\n", stderr); return 2; }
-    gc_init(heap, (char *)heap + 48000U);
+    if (!py86_heap_allocate()) return 2;
+    gc_init(heap, (char *)heap + py86_heap_bytes);
     mp_init();
     py86_console_input = isatty(0);
     py86_test_ctrl_c = getenv("PY86_TEST_CTRLC") != NULL;
@@ -215,12 +302,23 @@ int main(int argc, char **argv) {
         first_arg = 2;
         py86_set_home_cls(1);
     }
+    if (argc > first_arg && strcmp(argv[first_arg], "--heap-info") == 0) {
+        gc_info_t info;
+        gc_info(&info);
+        printf("heap_bytes=%u gc_total=%u gc_free=%u mode=%s\n",
+               py86_heap_bytes, (unsigned)info.total, (unsigned)info.free,
+               py86_heap_fixed ? "fixed" : "auto");
+        goto done;
+    }
     if (argc > first_arg &&
         (strcmp(argv[first_arg], "-h") == 0 ||
          strcmp(argv[first_arg], "--help") == 0)) {
         puts("Usage: PY86 [--home-cls] [script.py [args...]]");
         puts("       PY86 [--home-cls] -c \"code\" [args...]");
+        puts("       PY86 --heap-info");
         puts("       PY86 -h | --help | -V | --version");
+        puts("Environment: PY86_HEAP=auto|24000..60000");
+        puts("             PY86_HEAP_MAX=24000..60000 (auto limit)");
         puts("No script starts the interactive interpreter.");
         puts("Ctrl+C interrupts Python; Ctrl+Z then Enter exits the prompt.");
         goto done;

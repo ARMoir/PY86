@@ -202,3 +202,26 @@ in both builds and passed DOSBox functional tests.
 Py86 also now enables `help('modules')`, adds `-h/--help`, `-V/--version`,
 and corrects `sys.argv` handling of `-c 'code' [args...]`. These changes
 are covered by DOSBox command-line, module-help, and script argument tests.
+
+
+## Adaptive single-segment Python heap (November 2026)
+
+The previous Py86 startup unconditionally requested `malloc(48000)`.
+Open Watcom's large-data-model `malloc()` uses the far heap; ordinary
+far pointers cannot carry arithmetic across a 64 KB offset boundary.
+A safe first stage now tries **60,000 down to 24,000 bytes**, in 4 KB
+steps, chooses the first candidate which fits within one offset range,
+and checks a temporary **32 KB additional native malloc** for source file
+and DOS runtime headroom. A user may request an exact size using the
+`PY86_HEAP` DOS environment variable or cap automatic sizing using
+`PY86_HEAP_MAX`. The `PY86 --heap-info` command prints actual allocated
+raw heap bytes and usable GC pool/free bytes. All these settings leave the
+8086 instruction target, Open Watcom large memory model, and current VM,
+GC root scanning, Python libraries, and 16 KB C stack unchanged.
+
+This improves flexibility on machines with different *free conventional
+memory*; it does not grant access to memory above the 1 MB real-mode
+address limit or remove the ~64 KB single-allocation limit. Heap sizes
+and usable Python free memory must be checked using the actual EXE
+under DOSBox and preferably on the real NEC V20. Benchmarking at 48K
+and automatic sizes is a separate comparison, not a CPU-clock claim.
