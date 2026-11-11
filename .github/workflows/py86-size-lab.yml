@@ -123,6 +123,35 @@ jobs:
             ports/dos16/build/image-lab/size-test.json \
             ports/dos16/build/image-lab/size.json
 
+      - name: Compile speed-preserving linker elimination variant
+        id: eliminate_build
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          python ports/dos16/build.py --source "$RUNNER_TEMP/micropython-1.24.1" \
+            --watcom "$RUNNER_TEMP/watcom" --image-mode eliminate
+          cp ports/dos16/build/py86.exe ports/dos16/build/image-lab/PY86ELIM.EXE
+          python ports/dos16/image_size.py eliminate ports/dos16/build/py86.exe \
+            ports/dos16/build/image-lab/eliminate.json
+
+      - name: DOSBox test speed-preserving linker elimination
+        id: eliminate_test
+        if: steps.eliminate_build.outcome == 'success'
+        continue-on-error: true
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          set -euo pipefail
+          python ports/dos16/run_dos.py --dosbox "$DOSBOX_STAGING" \
+            --emulator staging --timeout 300 | tee ports/dos16/build/image-lab/eliminate-test.log
+          cp ports/dos16/build/test-results.json ports/dos16/build/image-lab/eliminate-test.json
+          python ports/dos16/image_size.py startup \
+            ports/dos16/build/image-lab/eliminate-test.json \
+            ports/dos16/build/image-lab/eliminate.json
+
       - name: Compile compact candidate with dead-code elimination
         id: compact_build
         continue-on-error: true
