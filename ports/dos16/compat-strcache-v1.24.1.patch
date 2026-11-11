@@ -1,0 +1,25 @@
+diff --git a/py/objstr.c b/py/objstr.c
+--- a/py/objstr.c
++++ b/py/objstr.c
+@@ -2236,3 +2236,21 @@ mp_obj_t mp_obj_new_str_via_qstr(const char *data, size_t len) {
+ mp_obj_t mp_obj_new_str_via_qstr(const char *data, size_t len) {
++    // Py86 16-bit experiment: reuse QSTR ids for one-byte ASCII characters.
++    // String iteration creates the same one-character QSTRs repeatedly.
++    // The cache stores only QSTR IDs (interned string data remains rooted).
++    // It never alters string contents, hashing, or Python string identity.
++    // ASCII only: multibyte UTF-8 is resolved by the unmodified path.
++    // This is intentionally off in the standard Py86 build until benchmarked.
++    #if PY86_CHAR_QSTR_CACHE
++    static qstr py86_ascii_qstr[128];
++    if (len == 1 && (unsigned char)data[0] < 128) {
++        unsigned int idx = (unsigned char)data[0];
++        qstr cached = py86_ascii_qstr[idx];
++        if (cached == MP_QSTRnull) {
++            cached = qstr_from_strn(data, 1);
++            py86_ascii_qstr[idx] = cached;
++        }
++        return MP_OBJ_NEW_QSTR(cached);
++    }
++    #endif
+     return MP_OBJ_NEW_QSTR(qstr_from_strn(data, len));
+ }

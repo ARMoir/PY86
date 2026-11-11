@@ -15,6 +15,8 @@ p = argparse.ArgumentParser()
 p.add_argument('--source', type=Path, required=True)
 p.add_argument('--watcom', type=Path, required=True)
 p.add_argument('--only', default='')
+p.add_argument('--string-mode', choices=('original', 'char-cache'), default='original',
+               help='Experimental single-character qstr cache; default unchanged')
 p.add_argument('--resume', action='store_true')
 p.add_argument('--lookup-mode', choices=('off', 'map', 'attr', 'both'),
                default='map', help='Lookup optimizations (production default: map)')
@@ -42,6 +44,7 @@ lookup_flags = {
 }
 flags = ['-q', '-bt=dos', '-0', '-ml', '-za99', '-ot', '-s', '-fpc', '-zp2', '-zt=256',
          *lookup_flags[args.lookup_mode],
+         '-dPY86_CHAR_QSTR_CACHE=' + ('1' if args.string_mode == 'char-cache' else '0'),
          '-i=' + str(ROOT / 'port'), '-i=' + str(src), '-i=' + str(build)]
 
 def run(cmd, output=None):
