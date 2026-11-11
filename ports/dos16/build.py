@@ -18,8 +18,9 @@ p.add_argument('--only', default='')
 p.add_argument('--string-mode', choices=('original', 'char-cache', 'lazy-hash', 'both'),
                default='both', help='String optimization (production default: both)')
 p.add_argument('--resume', action='store_true')
-p.add_argument('--vm-mode', choices=('baseline', 'fast-decode', 'compiler', 'far128', 'near384', 'combined'),
-               default='baseline', help='8086 VM dispatch and near/far data experiment')
+p.add_argument('--vm-mode', choices=('baseline', 'fast-decode', 'compiler', 'far128', 'near384', 'combined',
+                                     'inline', 'intrinsic', 'loop', 'reopt'),
+               default='baseline', help='8086 VM dispatch, compiler and near/far data experiment')
 p.add_argument('--lookup-mode', choices=('off', 'map', 'attr', 'both'),
                default='map', help='Lookup optimizations (production default: map)')
 args = p.parse_args()
@@ -52,6 +53,10 @@ vm_configs = {
     'far128': (128, [], 0),
     'near384': (384, [], 0),
     'combined': (256, ['-oi', '-ol', '-oe', '-oh'], 1),
+    'inline': (256, ['-oe'], 0),
+    'intrinsic': (256, ['-oi'], 0),
+    'loop': (256, ['-ol'], 0),
+    'reopt': (256, ['-oh'], 0),
 }
 threshold, vm_optimizations, fast_uint = vm_configs[args.vm_mode]
 flags = ['-q', '-bt=dos', '-0', '-ml', '-za99', '-ot', '-s', '-fpc', '-zp2',

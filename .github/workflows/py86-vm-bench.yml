@@ -1,9 +1,8 @@
 name: Py86 8086 VM and segmented-memory experiment
 
+# The comprehensive A/B study is opt-in. Production build + benchmark
+# and DOSBox regression tests still run on each branch push.
 on:
-  push:
-    branches:
-      - tandypy-dos16-port
   workflow_dispatch:
 
 permissions:

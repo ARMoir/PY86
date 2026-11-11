@@ -420,3 +420,21 @@ uploads linker maps to inspect the 16-bit default data-group size.
 The 64 KB near-data limit means some higher -zt thresholds may not link.
 All results are DOSBox emulator comparisons, not 7 MHz V20 measurements;
 production remains on baseline flags until a candidate is verified.
+
+
+### Isolating Watcom optimization options
+
+The first six-build VM experiment confirmed `-oi -ol -oe -oh` together
+improved Python function-call throughput by about 17.6% and bound-method
+calls by about 15.4%, although PythonClock was unchanged. More aggressive
+far data placement (128-byte threshold) reduced DGROUP from 61,536 to
+58,400 bytes but slowed dictionary and attribute lookups by around 14%; a
+384-byte near threshold made no measurable difference. One-byte-specialized
+operand decoding slowed instance attribute reads and increased the VM code
+size, so it is not enabled. The standard compiler remains `-ot -zt=256`.
+
+The follow-up Watcom-isolation experiment tests `--vm-mode inline` (`-oe`),
+`intrinsic` (`-oi`), `loop` (`-ol`), `reopt` (`-oh`) and `compiler`
+(all four), each against baseline with the same regression tests and opcode
+benchmarks. Its purpose is to isolate the call-speedup from the 4.7 KB
+executable growth before selecting any production compiler flag.
