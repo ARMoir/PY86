@@ -303,6 +303,15 @@ every frame or every test, and the timer adds no continuing per-bytecode cost.
 To measure full shell-to-first-output delay, an external DOS launcher timer
 would be required.
 
+In addition to the full screen transcript in `PY86.LOG`, the showcase appends
+a line to **`PY86TIME.CSV`** on every run. Its columns are
+`date,time,version,init_ms,first_python_ms,dispatch_ms`. This is an
+**append-only** 8.3-compatible CSV that survives subsequent runs and is useful
+for comparing versions and hardware configurations. The version is read from
+the adjacent release `README.TXT` (or `unknown` if unavailable). The
+startup timer is sampled before file I/O; CSV writing does not distort it.
+`PY86.LOG` remains a fresh per-run screen transcript.
+
 The demo also prints formatted ASCII sections and PASS/FAIL results for **19
 feature groups**: integer/big-integer and floating/complex arithmetic,
 Unicode/strings, lists/dicts/sets/tuples/comprehensions, classes,

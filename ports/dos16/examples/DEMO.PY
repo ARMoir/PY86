@@ -30,6 +30,38 @@ def example(code, output):
     show('    output: ' + repr(output))
 
 
+def append_startup_history():
+    # Append-only DOS 8.3 CSV retains comparisons between different releases.
+    # Native timings were sampled before imports/logging, so file I/O does
+    # not inflate the measured startup times.
+    timestamp = time.localtime()
+    version = 'unknown'
+    try:
+        with open('README.TXT', 'r') as info:
+            first = info.readline().split()
+            if len(first) >= 2 and first[0] == 'Py86':
+                version = first[1].rstrip(':')
+    except OSError:
+        pass
+    filename = 'PY86TIME.CSV'
+    try:
+        with open(filename, 'r') as previous:
+            has_header = bool(previous.readline())
+    except OSError:
+        has_header = False
+    try:
+        with open(filename, 'a') as history:
+            if not has_header:
+                history.write('date,time,version,init_ms,first_python_ms,dispatch_ms\n')
+            history.write('%04d-%02d-%02d,%02d:%02d:%02d,%s,%d,%d,%d\n' %
+                          (timestamp[0], timestamp[1], timestamp[2],
+                           timestamp[3], timestamp[4], timestamp[5],
+                           version, INIT_MS, STARTUP_MS, STARTUP_MS - INIT_MS))
+        show('  Startup history appended to ' + filename)
+    except OSError as error:
+        show('  Startup CSV not writable: ' + str(error))
+
+
 def line():
     show('+----------------------------------------------------------+')
 
@@ -284,6 +316,7 @@ def main():
              (STARTUP_MS - INIT_MS))
         show('  BIOS timer resolution: about 55 ms')
         show('  Note: EXE loading before C main is not included.')
+        append_startup_history()
         show('')
         banner('LANGUAGE AND OBJECTS')
         check('Integer arithmetic and big ints', integers)

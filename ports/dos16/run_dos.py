@@ -143,6 +143,21 @@ if logs.get('CLOCK.OUT', '').count('~-------------~') < 2:
 if logs.get('ONECLK.OUT', '').count('~-------------~') < 4:
     missing.append('ONECLK.OUT: fewer than two optimized clock frames')
 demo_log = stage / 'PY86.LOG'
+history_path = stage / 'PY86TIME.CSV'
+if not history_path.is_file():
+    missing.append('PY86TIME.CSV: startup history not saved')
+else:
+    rows = history_path.read_text(errors='replace').splitlines()
+    if len(rows) < 2 or rows[0] != 'date,time,version,init_ms,first_python_ms,dispatch_ms':
+        missing.append('PY86TIME.CSV: missing startup CSV header or data')
+    else:
+        try:
+            values = rows[-1].split(',')
+            boot_ms, first_ms, dispatch_ms = map(int, values[-3:])
+            if not 0 <= boot_ms <= first_ms or dispatch_ms != first_ms - boot_ms:
+                missing.append('PY86TIME.CSV: inconsistent measured startup values')
+        except (ValueError, IndexError):
+            missing.append('PY86TIME.CSV: invalid startup timing row')
 if not demo_log.is_file():
     missing.append('PY86.LOG: demo did not create its persistent log')
 else:
