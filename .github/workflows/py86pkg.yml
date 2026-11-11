@@ -13,6 +13,10 @@ on:
       - '.github/workflows/py86pkg.yml'
   workflow_dispatch:
 
+concurrency:
+  group: py86pkg-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -87,7 +91,6 @@ jobs:
       - name: Install DOSBox for 8086 execution
         shell: bash
         run: |
-          sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends dosbox xvfb xauth
 
       - name: Execute converted roman through Py86
