@@ -80,7 +80,7 @@ jobs:
             esac
             python ports/dos16/build.py --source "$src" \
               --watcom "$RUNNER_TEMP/ow" --core-version "$ver" \
-              --runtime-profile "$@" \
+              --data-layout far128 --runtime-profile "$@" \
               > "ports/dos16/build/upstream-129/$mode-build.log" 2>&1 || {
                 tail -n 100 "ports/dos16/build/upstream-129/$mode-build.log"
                 exit 1
