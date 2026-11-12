@@ -125,6 +125,51 @@ Available conventional RAM and 64 KiB segmented memory limits still apply.
 The slice-step limitation is documented in `tests/LIMITS.PY`. Runtime speed and
 memory consumption on real 7 MHz V20 hardware are not yet characterized.
 
+## Counting benchmark and interpreter robustness tests
+
+The packaged `RUNCOUNT.BAT` (or `PY86 COUNT16.PY`) measures exactly 65,536
+integer increments, starting at -32768 and finishing after 32767. It reports
+`COUNT16 iterations=65536 elapsed_ms=N` and `PASS count16` after checking
+the final value. Timing excludes DOS program loading, source parsing and
+console output, and uses DOS BIOS ticks at approximately 55 ms resolution.
+Record the output from a physical V20 separately; the GitHub Actions result
+is an emulator measurement, **not** a physical 7 MHz result.
+
+The normal DOSBox integration suite also runs `tests/ROBUST.PY` to check
+positive/negative bytearray, bytes and memoryview bounds, GC pressure and
+retained sentinel data. It checks that invalid `BADSYNT.PY` is rejected with
+a syntax error and that a subsequent Python invocation still runs. These
+are **public-API boundary tests**, not proof that native memory corruption
+is impossible.
+
+A **separate, test-only** `PY86F.EXE` is built with `build.py
+--vm-fault-probe` for fault injection into compiled MicroPython bytecode.
+It uses the *same* production VM and GC object files, but a separate main
+object compiled with `PY86_TEST_VMFAULT`. The production `PY86.EXE`
+contains **no fault-injection interface** and `PY86F.EXE` is **never**
+included in a release or copied to the normal DOS installation.
+
+`run_vm_fault.py` exercises each of the following in a fresh, disposable
+DOSBox process:
+
+- Unmodified bytecode must execute normally.
+- Reserved opcode (0x00) must produce a handled Python opcode exception.
+- Corrupted long jump goes outside the compiled function's bytecode buffer.
+- Corrupted function bytecode pointer points at segment 0, offset 0.
+
+The last two intentionally violate VM assumptions and may crash or hang.
+Their exact exception, return, crash and timeout outcomes are captured in
+`build/vm-fault-results.json` and the per-case emulator logs. **They are
+diagnostic/report-only**, because unguarded bytecode is a known limitation,
+and a fault-injection test alone is not a fix for it. The first two tests
+must pass in CI. The `PY86-count-and-VM-integrity` GitHub Actions artifact
+includes the count, memory checks and fault report.
+
+**Do not run `PY86F.EXE` or corrupt-bytecode tests on your Tandy, a
+physical DOS machine, or a drive containing user data.** The safe
+`RUNCOUNT` benchmark and `ROBUST.PY` regression checks are suitable
+for ordinary DOS systems.
+
 ## Reproducibility and test evidence
 
 The original pre-rename `TANDYPY.EXE` in the uploaded development archive
