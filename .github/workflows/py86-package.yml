@@ -2,12 +2,7 @@ name: Py86 DOS + PythonClock package
 
 on:
   push:
-    branches:
-      - tandypy-dos16-port
-      - master
-    paths-ignore:
-      - 'tools/py86pkg/**'
-      - '.github/workflows/py86pkg.yml'
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -15,7 +10,8 @@ permissions:
 
 jobs:
   package:
-    name: Build PY86.EXE and package PythonClock
+    if: github.ref == 'refs/heads/main'
+    name: Legacy release workflow disabled outside main
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
