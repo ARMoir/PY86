@@ -186,7 +186,7 @@ if args.vm_fault_probe:
     fault_link = ['system dos', 'option quiet', 'option stack=16384',
                   'option map=py86f.map', 'name py86f.exe',
                   *['file ' + name for name in fault_objects]]
-    (build / 'fault-link.lnk').write_text('\\n'.join(fault_link) + '\\n')
+    (build / 'fault-link.lnk').write_text('\n'.join(fault_link) + '\n')
     run(['wlink', '@fault-link.lnk'], build / 'fault-link.log')
     print('Built test-only, unsafe-on-real-hardware', build / 'py86f.exe')
 
