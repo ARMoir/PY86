@@ -86,6 +86,82 @@ def selftest():
     print('PASS all 65536 root-window lengths; four-byte roots, two-byte stride')
 
 
+PROBE = r'''
+// Test-only executable: called after gc_init and BEFORE mp_init.
+// No stack/context roots participate: the only root is the supplied byte range.
+int py86_gc_root_probe(void) {
+    unsigned short storage[12];
+    byte *range = (byte *)storage;
+    size_t offset, length;
+    mp_state_mem_area_t *area = &MP_STATE_MEM(area);
+    if (sizeof(void *) != 4) return 10;
+    for (offset = 0; offset <= 16; offset += 2) {
+        for (length = 0; length <= 20; length++) {
+            void *parent = gc_alloc(16, 0);
+            void *child = gc_alloc(16, 0);
+            size_t parent_block, child_block;
+            int expected = length >= offset + sizeof(void *);
+            if (!parent || !child) return 11;
+            memset(parent, 0, 16);
+            memset(child, 0, 16);
+            memset(range, 0, sizeof(storage));
+            // The only child pointer is at +2, not a four-byte boundary.
+            memcpy((byte *)parent + 2, &child, sizeof(child));
+            memcpy(range + offset, &parent, sizeof(parent));
+            parent_block = BLOCK_FROM_PTR(area, parent);
+            child_block = BLOCK_FROM_PTR(area, child);
+            gc_collect_start_common();
+            py86_gc_collect_root_words(range, length);
+            if ((ATB_GET_KIND(area, parent_block) == AT_MARK) != expected) return 12;
+            if ((ATB_GET_KIND(area, child_block) == AT_MARK) != expected) return 13;
+            gc_collect_end();
+            // Free retained objects without any conservative roots.
+            gc_sweep_all();
+        }
+    }
+    return 0;
+}
+'''
+
+
+def native_probe(source, a, mode):
+    gc_file, main_file = source / 'py/gc.c', PORT / 'port/main.c'
+    saved_gc, saved_main = gc_file.read_bytes(), main_file.read_bytes()
+    gc_text = gc_file.read_text()
+    if mode == 'base':
+        gc_text += '''
+void py86_gc_collect_root_words(void *start, size_t bytes) {
+    byte *p = (byte *)start;
+    for (; bytes >= sizeof(void *); bytes -= 2, p += 2) {
+        void *root;
+        memcpy(&root, p, sizeof(root));
+        gc_collect_root(&root, 1);
+    }
+}
+'''
+    try:
+        gc_file.write_text(gc_text + PROBE)
+        main_text = replace_once(main_file.read_text(), 'int main(int argc, char **argv) {',
+            'extern int py86_gc_root_probe(void);\nint main(int argc, char **argv) {')
+        main_file.write_text(replace_once(main_text, '    mp_init();', '    return py86_gc_root_probe();\n    mp_init();'))
+        run(sys.executable, PORT / 'build.py', '--source', source,
+            '--watcom', a.watcom, '--core-version', '1.29.0', '--data-layout', 'far128',
+            '--runtime-profile', '--parser-alloc-mode', 'block1024', '--compile-opt', 'all',
+            '--only', 'gc,main', log=mode + '-probe-build.log')
+        stage = OUT / (mode + '-probe')
+        stage.mkdir(exist_ok=True)
+        shutil.copy2(PORT / 'build/py86.exe', stage / 'PROBE.EXE')
+        (stage / 'PROBE.BAT').write_bytes(b'@echo off\r\nset PY86_HEAP=48000\r\nPROBE\r\nif errorlevel 1 goto fail\r\necho PASS > RESULT.TXT\r\ngoto end\r\n:fail\r\necho FAIL > RESULT.TXT\r\n:end\r\n')
+        conf = stage / 'probe.conf'
+        conf.write_text('[sdl]\nfullscreen=false\n[dosbox]\nmemsize=1\n[cpu]\ncore=normal\ncpu_cycles=20000\n[autoexec]\nmount c "' + str(stage) + '"\nc:\ncall PROBE.BAT\nexit\n')
+        run(a.dosbox, '--conf', conf, '--noprimaryconf', '--nolocalconf', log=mode + '-probe.log')
+        assert (stage / 'RESULT.TXT').read_text().strip() == 'PASS', 'Native root alignment/partial-range probe failed'
+        print('PASS ' + mode + ': 189 native root/child alignment and boundary cases')
+    finally:
+        gc_file.write_bytes(saved_gc)
+        main_file.write_bytes(saved_main)
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--source', type=Path, required=True)
@@ -120,6 +196,7 @@ def main():
             shutil.copy2(PORT / 'build/test-results.json', OUT / (mode + '-regression.json'))
             shutil.copytree(PORT / 'dos-test', OUT / (mode + '-regression'),
                             ignore=shutil.ignore_patterns('*.EXE'), dirs_exist_ok=True)
+            native_probe(source, a, mode)
         # Alternate order to expose run-order effects. Six independent DOS sessions.
         for trial in range(3):
             for mode in (('base', 'batch') if trial % 2 == 0 else ('batch', 'base')):
