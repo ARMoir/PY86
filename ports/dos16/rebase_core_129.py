@@ -81,16 +81,27 @@ TRANSFORMS = {
 }
 
 def adapt_new_core(root:Path):
-    # 1.29 moved labels after local declarations; Watcom's mixed C99
-    # syntax rejects labels unless a statement precedes them.
+    # Open Watcom C16 is strict about goto labels following mixed
+    # declarations. Convert the lexer CR-LF read retry into a do-loop.
     src=root/"py/lexer.c"
     data=src.read_text()
-    data=one(data,"\nfetch_next_byte:\n","\n;\n;\n;\n;\n;\n;\nfetch_next_byte:\n")
+    data=one(data,"    mp_uint_t chr2;\nfetch_next_byte:\n",
+             "    mp_uint_t chr2;\n    do {\n")
+    data=one(data,"            goto fetch_next_byte;\n",
+             "            continue;\n")
+    data=one(data,"    }\n\n    // check if we need to insert a newline at end of file",
+             "    }\n        break;\n    } while (1);\n\n    // check if we need to insert a newline at end of file")
     src.write_text(data)
 
+    # Place the formatter's precision-retry label first in its own
+    # nested lexical scope, allowing fresh initialized local variables
+    # each time precision is increased via goto try_again.
     src=root/"py/formatfloat.c"
     data=src.read_text()
-    data=one(data,"\ntry_again:\n    ;\n","\n;\n;\n;\n;\n;\n;\ntry_again:\n    ;\n")
+    data=one(data,"    int num_digits = (SAFE_MANTISSA_DIGITS < max_digits ? SAFE_MANTISSA_DIGITS : max_digits);\ntry_again:\n    ;\n",
+             "    int num_digits = (SAFE_MANTISSA_DIGITS < max_digits ? SAFE_MANTISSA_DIGITS : max_digits);\n    {\ntry_again:\n    ;\n")
+    data=one(data,"    return buf + reprlen - buf_entry;\n}",
+             "    return buf + reprlen - buf_entry;\n    }\n}")
     src.write_text(data)
 
     src=root/"py/parsenum.c"
