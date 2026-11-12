@@ -243,6 +243,55 @@ mp_lexer_t *mp_lexer_new_from_file(qstr filename) {
     }
 }
 
+/* Fault injection exists ONLY in the isolated, non-release PY86F.EXE.
+ * The production PY86.EXE compiles none of this code.  Never run this test
+ * binary on physical DOS hardware: an invalid instruction pointer can hang,
+ * corrupt memory, or crash DOS.  DOSBox runs one case per disposable session.
+ */
+#if defined(PY86_TEST_VMFAULT)
+#include "py/objfun.h"
+#include "py/bc.h"
+static int py86_vm_fault_inject(mp_obj_t object) {
+    const char *mode = getenv("PY86_VMFAULT");
+    mp_obj_fun_bc_t *fun;
+    const byte *cursor;
+    byte *opcode;
+    if (mode == NULL || *mode == '\0') return 0;
+    if (mp_obj_get_type(object) != &mp_type_fun_bc) {
+        fputs("VMFAULT ERROR: expected a bytecode function\n", stderr);
+        return -1;
+    }
+    fun = MP_OBJ_TO_PTR(object);
+    if (strcmp(mode, "bad-pointer") == 0) {
+        /* Deliberately corrupt the compiled function's bytecode pointer. */
+        fun->bytecode = (const byte *)MK_FP(0, 0);
+    } else if (strcmp(mode, "bad-opcode") == 0 ||
+               strcmp(mode, "bad-jump") == 0) {
+        /* Leave the prelude and constant table intact.  Only damage the
+         * executable bytecode, not unrelated memory in the injector. */
+        cursor = fun->bytecode;
+        MP_BC_PRELUDE_SIG_DECODE(cursor);
+        MP_BC_PRELUDE_SIZE_DECODE(cursor);
+        opcode = (byte *)(cursor + n_info + n_cell);
+        if (strcmp(mode, "bad-opcode") == 0) {
+            opcode[0] = 0; /* Reserved opcode: should raise an exception. */
+        } else {
+            /* Valid JUMP with a corrupt ~16K forward destination.
+             * There is no per-instruction IP bounds guard in the VM. */
+            opcode[0] = MP_BC_JUMP;
+            opcode[1] = 0xbf;
+            opcode[2] = 0xff;
+        }
+    } else {
+        fputs("VMFAULT ERROR: invalid fault name\n", stderr);
+        return -1;
+    }
+    printf("VMFAULT INJECTED %s\n", mode);
+    fflush(stdout);
+    return 0;
+}
+#endif
+
 static int execute(const char *source, int file, mp_parse_input_kind_t kind) {
     nlr_buf_t nlr;
     if (nlr_push(&nlr) == 0) {
@@ -251,6 +300,12 @@ static int execute(const char *source, int file, mp_parse_input_kind_t kind) {
         qstr name = lex->source_name;
         mp_parse_tree_t tree = mp_parse(lex, kind);
         mp_obj_t fun = mp_compile(&tree, name, kind == MP_PARSE_SINGLE_INPUT);
+        #if defined(PY86_TEST_VMFAULT)
+        if (py86_vm_fault_inject(fun) != 0) {
+            nlr_pop();
+            return 4;
+        }
+        #endif
         mp_call_function_0(fun);
         nlr_pop();
         return 0;
