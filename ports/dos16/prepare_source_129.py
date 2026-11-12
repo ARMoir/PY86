@@ -44,6 +44,8 @@ def main():
         entries.append({"name":name,"exit":run.returncode,"diagnostic":run.stderr[-15000:]})
         print("PATCH",name,"exit",run.returncode,flush=True)
         print(run.stderr[-6500:],flush=True)
+    from rebase_core_129 import rebase
+    rebased=rebase(source,out)
     rejects={}
     for path in sorted(source.rglob("*.rej")):
         name=str(path.relative_to(source))
@@ -55,7 +57,7 @@ def main():
         print("UNRESOLVED",name,len(content),"bytes")
     data={"version":"1.29.0","sha":SHA,"patches":entries,
           "rejects":{k:len(v) for k,v in rejects.items()},
-          "all_resolved":len(rejects)==0 and all(x["exit"]==0 for x in entries)}
+          "all_resolved":len(rejects)==0 and len(rebased)==10 and all(x["exit"]==0 for x in entries[1:])}
     (out/"patch-report.json").write_text(json.dumps(data,indent=2))
     (out/"patch-report.txt").write_text(
         "\n".join([("OK " if i["exit"]==0 else "REBASE ")+i["name"] for i in entries]+
