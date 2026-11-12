@@ -17,6 +17,8 @@ def run():
     p.add_argument('--emulator', choices=('classic','staging'), default='staging')
     p.add_argument('--mode', required=True)
     p.add_argument('--timeout', type=int, default=360)
+    p.add_argument('--parser-stress', action='store_true',
+                   help='Also compile and validate PARSST.PY syntax tree stress')
     args = p.parse_args()
     stage = ROOT / 'dos-test'
     build = ROOT / 'build'
@@ -27,10 +29,14 @@ def run():
                 'py86 DEMO.PY > PDEM2.OUT','if errorlevel 1 goto fail',
                 'py86 ONECLK.PY > PCLK.OUT','if errorlevel 1 goto fail',
                 'py86 SHOW.PY > PSHOW.OUT','if errorlevel 1 goto fail',
+                *(['py86 PARSST.PY > PSTRES.OUT','if errorlevel 1 goto fail']
+                  if args.parser_stress else []),
                 'echo PASS > PROF.RES','goto done',':fail',
                 'echo FAIL > PROF.RES',':done','']
     (stage / 'PROF.BAT').write_bytes(('\r\n'.join(commands)).encode('ascii'))
-    for name in ('PDEM1.OUT','PDEM2.OUT','PCLK.OUT','PSHOW.OUT','PROF.RES'):
+    if args.parser_stress and not (stage / 'PARSST.PY').is_file():
+        raise SystemExit('Parser stress fixture PARSST.PY was not staged')
+    for name in ('PDEM1.OUT','PDEM2.OUT','PCLK.OUT','PSHOW.OUT','PSTRES.OUT','PROF.RES'):
         (stage / name).unlink(missing_ok=True)
     conf = build / 'compile-profile-dosbox.conf'
     cpu = 'core=normal\ncpu_cycles=20000\n' if args.emulator == 'staging' else 'core=normal\ncputype=8086\ncycles=fixed 20000\n'
@@ -51,7 +57,9 @@ def run():
     if not status.exists() or status.read_text().strip() != 'PASS':
         raise SystemExit('Profiling batch failed: see output and emulator logs')
     results = {}
-    for filename in ('PDEM1.OUT','PDEM2.OUT','PCLK.OUT','PSHOW.OUT'):
+    sample_names = ('PDEM1.OUT','PDEM2.OUT','PCLK.OUT','PSHOW.OUT') + \
+        (('PSTRES.OUT',) if args.parser_stress else ())
+    for filename in sample_names:
         output = (stage / filename).read_text(errors='replace')
         matches = list(PROF.finditer(output))
         if len(matches) != 1:
@@ -59,6 +67,8 @@ def run():
         row = dict(zip(FIELDS, (int(v) for v in matches[0].groups())))
         if filename.startswith('PDEM') and not ('Tests passed: 19' in output and 'failed: 0' in output and 'PASS feature_demo_complete' in output):
             raise SystemExit('Feature demo failed: ' + filename)
+        if filename == 'PSTRES.OUT' and 'PASS parser_stress' not in output:
+            raise SystemExit('Parser stress test failed')
         if filename == 'PSHOW.OUT' and '[PASS] 8 LIVE EXAMPLES' not in output:
             raise SystemExit('Showcase failed: ' + filename)
         if 'Traceback' in output:
