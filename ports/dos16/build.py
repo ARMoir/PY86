@@ -19,6 +19,14 @@ p.add_argument('--only', default='')
 p.add_argument('--string-mode', choices=('original', 'char-cache', 'lazy-hash', 'both'),
                default='both', help='String optimization (production default: both)')
 p.add_argument('--resume', action='store_true')
+p.add_argument('--parse-chunk', type=int, choices=(16, 32, 64, 128),
+               default=16, help='Initial parse allocation chunk; opt-in benchmark')
+p.add_argument('--compile-opt', choices=('baseline', 'loop', 'intrinsic', 'all'),
+               default='baseline', help='Optimize lexer/parser/compiler C files only')
+p.add_argument('--source-loader', choices=('original', 'direct'), default='original',
+               help='DOS source file loader; direct is experimental')
+p.add_argument('--profile-compile', action='store_true',
+               help='Include opt-in BIOS-tick compile timing, enabled by PY86_PROFILE=1')
 p.add_argument('--vm-fault-probe', action='store_true',
                help='Also build test-only PY86F.EXE with bytecode fault injection (never release)')
 p.add_argument('--data-layout',
@@ -92,6 +100,7 @@ flags = ['-q', '-bt=dos', '-0',
          '-mm' if args.data_layout == 'medium' else '-ml',
          '-za99', '-ot', '-s', '-fpc', '-zp2',
          '-zt=' + str(threshold),
+         '-dMICROPY_ALLOC_PARSE_CHUNK_INIT=' + str(args.parse_chunk),
          *(['-dPY86_HOT_STATE_NEAR=1'] if args.data_layout == 'hotstate' else []),
          *vm_optimizations,
          '-dPY86_VM_FAST_UINT=' + str(fast_uint),
@@ -100,6 +109,27 @@ flags = ['-q', '-bt=dos', '-0',
          '-dPY86_CHAR_QSTR_CACHE=' + ('1' if args.string_mode in ('char-cache', 'both') else '0'),
          '-dPY86_LAZY_STR_HASH=' + ('1' if args.string_mode in ('lazy-hash', 'both') else '0'),
          '-i=' + str(ROOT / 'port'), '-i=' + str(src), '-i=' + str(build)]
+
+# A/B compiler options apply solely to source-to-bytecode C compilation.
+# All runtime/VM .c files remain production-optimized and untouched.
+COMPILER_FILES = frozenset(('lexer.c', 'parse.c', 'compile.c', 'emitbc.c', 'qstr.c'))
+COMPILE_OPTS = {
+    'baseline': [],
+    'loop': ['-ol'],
+    'intrinsic': ['-oi'],
+    'all': ['-oi', '-ol', '-oe', '-oh'],
+}
+
+def per_file_flags(c):
+    selected = list(flags)
+    if c.name in COMPILER_FILES:
+        selected.extend(COMPILE_OPTS[args.compile_opt])
+    if c.name == 'main.c':
+        if args.source_loader == 'direct':
+            selected.append('-dPY86_SOURCE_DIRECT=1')
+        if args.profile_compile:
+            selected.append('-dPY86_COMPILE_PROFILE=1')
+    return selected
 
 def run(cmd, output=None):
     cmd[0] = str(toolbin / (cmd[0] + exesuffix)) if cmd[0] in ('wcc', 'wlink') else cmd[0]
@@ -132,7 +162,7 @@ if not args.only and not args.resume:
     pytool('makeversionhdr.py', [gen / 'mpversion.h'], build / 'version.log')
     pp_parts = []
     with ThreadPoolExecutor(max_workers=8) as pool:
-        pp_parts = list(pool.map(lambda c: run(['wcc', *flags, '-dNO_QSTR', '-p', c]), sources))
+        pp_parts = list(pool.map(lambda c: run(['wcc', *per_file_flags(c), '-dNO_QSTR', '-p', c]), sources))
     pp = '\n'.join(pp_parts)
     (build / 'all.i').write_text(pp)
     qnames = sorted(set(re.findall(r'MP_QSTR_(\w+)', pp)))
@@ -162,7 +192,7 @@ for c in sources:
         continue
     print('CC', c.name, flush=True)
     try:
-        run(['wcc', *flags, '-fo=' + str(obj), c], build / (c.stem + '.log'))
+        run(['wcc', *per_file_flags(c), '-fo=' + str(obj), c], build / (c.stem + '.log'))
     except SystemExit:
         failures.append(c.stem)
 

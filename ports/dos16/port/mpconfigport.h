@@ -70,7 +70,9 @@ void py86_vm_hook_loop(void);
 #define MICROPY_PY___FILE__ (1)
 #define MICROPY_PY_MATH (1)
 #define MICROPY_ALLOC_PATH_MAX (128)
+#ifndef MICROPY_ALLOC_PARSE_CHUNK_INIT
 #define MICROPY_ALLOC_PARSE_CHUNK_INIT (16)
+#endif
 #define MICROPY_STACK_CHECK (1)
 #define MICROPY_USE_INTERNAL_ERRNO (1)
 #define MICROPY_QSTR_BYTES_IN_HASH (1)

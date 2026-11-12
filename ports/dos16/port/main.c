@@ -28,6 +28,24 @@ static char *stack_top;
 static void *heap;
 static int py86_exit_requested;
 
+/* Opt-in profiling uses BIOS ticks, keeping the normal build unchanged.
+ * No output is emitted until a script has finished executing. */
+#if defined(PY86_COMPILE_PROFILE)
+static int py86_profile_enabled;
+static unsigned long py86_profile_read_ms;
+static unsigned long py86_profile_ticks(void) {
+    union REGS in_regs, out_regs;
+    memset(&in_regs, 0, sizeof(in_regs));
+    in_regs.h.ah = 0;
+    int86(0x1a, &in_regs, &out_regs);
+    return ((unsigned long)out_regs.x.cx << 16) | out_regs.x.dx;
+}
+static unsigned long py86_profile_elapsed(unsigned long from, unsigned long to) {
+    unsigned long ticks = to >= from ? to - from : 1573040UL - from + to;
+    return ticks * 55UL - ticks * 75UL / 1000UL;
+}
+#endif
+
 /* Single-segment GC heap selection.  Open Watcom -ml malloc() uses its
  * far heap, but ordinary far pointers cannot wrap their 16-bit offsets.
  * The larger multi-segment case needs a separate split-GC project.
@@ -213,21 +231,54 @@ mp_import_stat_t mp_import_stat(const char *path) {
 
 mp_lexer_t *mp_lexer_new_from_file(qstr filename) {
     const char *path = qstr_str(filename);
-    FILE *f = fopen(path, "rb");
+    FILE *f;
     long len;
     char *buf;
+    #if defined(PY86_COMPILE_PROFILE)
+    unsigned long io_start = py86_profile_ticks();
+    #endif
+    f = fopen(path, "rb");
     if (!f) mp_raise_OSError(MP_ENOENT);
     if (fseek(f, 0, SEEK_END) || (len = ftell(f)) < 0 || len > 24000L) {
         fclose(f); mp_raise_OSError(MP_EFBIG);
     }
     rewind(f);
-    /* Allocate outside GC while reading; release on any allocation exception. */
+    #if defined(PY86_SOURCE_DIRECT)
+    /* Experimental single-copy path: allocate the final lexer-owned GC
+     * buffer directly.  A local exception guard closes the DOS descriptor
+     * even if m_new() fails. The reader frees the buffer after parsing. */
+    {
+        nlr_buf_t nlr;
+        if (nlr_push(&nlr) == 0) {
+            buf = m_new(char, (size_t)len + 1);
+            if (fread(buf, 1, (size_t)len, f) != (size_t)len) {
+                fclose(f);
+                m_del(char, buf, (size_t)len + 1);
+                nlr_pop();
+                mp_raise_OSError(MP_EIO);
+            }
+            fclose(f);
+            buf[len] = 0;
+            #if defined(PY86_COMPILE_PROFILE)
+            py86_profile_read_ms = py86_profile_elapsed(io_start, py86_profile_ticks());
+            #endif
+            nlr_pop();
+            return mp_lexer_new_from_str_len(filename, buf, (size_t)len, (size_t)len + 1);
+        }
+        fclose(f);
+        nlr_jump(nlr.ret_val);
+    }
+    #else
+    /* Production loader intentionally unchanged. */
     buf = malloc((size_t)len + 1);
     if (!buf) { fclose(f); mp_raise_msg(&mp_type_MemoryError, MP_ERROR_TEXT("source buffer")); }
     if (fread(buf, 1, (size_t)len, f) != (size_t)len) {
         free(buf); fclose(f); mp_raise_OSError(MP_EIO);
     }
     fclose(f);
+    #if defined(PY86_COMPILE_PROFILE)
+    py86_profile_read_ms = py86_profile_elapsed(io_start, py86_profile_ticks());
+    #endif
     buf[len] = 0;
     {
         nlr_buf_t nlr;
@@ -241,6 +292,7 @@ mp_lexer_t *mp_lexer_new_from_file(qstr filename) {
         free(buf);
         nlr_jump(nlr.ret_val);
     }
+    #endif
 }
 
 /* Fault injection exists ONLY in the isolated, non-release PY86F.EXE.
@@ -295,12 +347,33 @@ static int py86_vm_fault_inject(mp_obj_t object) {
 
 static int execute(const char *source, int file, mp_parse_input_kind_t kind) {
     nlr_buf_t nlr;
+    #if defined(PY86_COMPILE_PROFILE)
+    unsigned long t0 = 0, t1 = 0, t2 = 0, t3 = 0, t4 = 0;
+    unsigned long read_ms = 0;
+    py86_profile_enabled = getenv("PY86_PROFILE") != NULL;
+    if (py86_profile_enabled) {
+        py86_profile_read_ms = 0;
+        t0 = py86_profile_ticks();
+    }
+    #endif
     if (nlr_push(&nlr) == 0) {
         mp_lexer_t *lex = file ? mp_lexer_new_from_file(qstr_from_str(source)) :
             mp_lexer_new_from_str_len(MP_QSTR__lt_stdin_gt_, source, strlen(source), 0);
         qstr name = lex->source_name;
+        #if defined(PY86_COMPILE_PROFILE)
+        if (py86_profile_enabled) {
+            t1 = py86_profile_ticks();
+            read_ms = file ? py86_profile_read_ms : 0;
+        }
+        #endif
         mp_parse_tree_t tree = mp_parse(lex, kind);
+        #if defined(PY86_COMPILE_PROFILE)
+        if (py86_profile_enabled) t2 = py86_profile_ticks();
+        #endif
         mp_obj_t fun = mp_compile(&tree, name, kind == MP_PARSE_SINGLE_INPUT);
+        #if defined(PY86_COMPILE_PROFILE)
+        if (py86_profile_enabled) t3 = py86_profile_ticks();
+        #endif
         #if defined(PY86_TEST_VMFAULT)
         if (py86_vm_fault_inject(fun) != 0) {
             nlr_pop();
@@ -309,6 +382,20 @@ static int execute(const char *source, int file, mp_parse_input_kind_t kind) {
         #endif
         mp_call_function_0(fun);
         nlr_pop();
+        #if defined(PY86_COMPILE_PROFILE)
+        if (py86_profile_enabled) {
+            gc_info_t gi;
+            t4 = py86_profile_ticks();
+            gc_info(&gi);
+            printf("P86PROF read_ms=%lu lexer_ms=%lu parse_ms=%lu compile_ms=%lu exec_ms=%lu gc_free=%u\n",
+                read_ms,
+                py86_profile_elapsed(t0, t1) - read_ms,
+                py86_profile_elapsed(t1, t2),
+                py86_profile_elapsed(t2, t3),
+                py86_profile_elapsed(t3, t4),
+                (unsigned)gi.free);
+        }
+        #endif
         return 0;
     }
     {
