@@ -57,6 +57,16 @@ DOSBox results are an initial screening only. Timing granularity is about
 
 ## Physical Tandy 1000 EX / CF card testing
 
+## One-command repeated A/B test
+
+The included RUN3.BAT runs the 19-feature DEMO.PY in alternating BASE,
+1KB+ALL order three times each, preserving the six logs automatically:
+BAS1.LOG, OPT1.LOG, BAS2.LOG, OPT2.LOG, BAS3.LOG, OPT3.LOG.
+It then performs one parser-stress check of each build, producing SBAS.LOG
+and SOPT.LOG. This is the preferred first hardware test because it removes
+manual log renaming and keeps the heap fixed at 48 KB. If any command fails,
+check its most recent log and keep the working PY86.EXE unchanged.
+
 1. Download the successful parser-lab GitHub Actions artifact, then extract
    its nested PY86-PARSER-LAB.zip into your existing C:\PY86 directory.
    Your existing PY86.EXE and .PY scripts are not replaced.
