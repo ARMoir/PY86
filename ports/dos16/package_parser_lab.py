@@ -41,6 +41,36 @@ def bat(exe: str, demo_log: str, stress_log: str) -> str:
         ""
     ]))
 
+def triple_bat():
+    """One-command six-run BASE/P1KA A/B with unique DOS 8.3 logs."""
+    commands = [
+        "@echo off",
+        "set PY86_PROFILE=1",
+        "set PY86_HEAP=48000",
+    ]
+    for i in (1, 2, 3):
+        for exe, name in (("P86PBASE", "BAS"), ("P86P1KA", "OPT")):
+            commands.append(exe + " DEMO.PY > " + name + str(i) + ".LOG")
+            commands.append("if errorlevel 1 goto fail")
+    for exe, name in (("P86PBASE", "SBAS"), ("P86P1KA", "SOPT")):
+        commands.append(exe + " PARSST.PY > " + name + ".LOG")
+        commands.append("if errorlevel 1 goto fail")
+    for i in (1, 2, 3):
+        commands.append('FIND "P86PROF" BAS' + str(i) + ".LOG")
+        commands.append('FIND "P86PROF" OPT' + str(i) + ".LOG")
+    commands.extend([
+        "echo PASS parser A/B 3x; upload BAS1-3.LOG and OPT1-3.LOG",
+        "goto done",
+        ":fail",
+        "echo FAILED parser A/B; check last output log",
+        ":done",
+        "set PY86_HEAP=",
+        "set PY86_PROFILE=",
+        "",
+    ])
+    return "\r\n".join(commands)
+
+
 def main():
     verified = {}
     for mode, info in MODES.items():
@@ -55,6 +85,10 @@ def main():
     if "base" not in verified:
         raise SystemExit("Parser baseline not verified; refusing to package")
     docs = [
+        "EASIEST TEST: RUN3 automatically alternates BASE and 1KB+ALL",
+        "three times, preserving BAS1/BAS2/BAS3 and OPT1/OPT2/OPT3 logs.",
+        "It also creates SBAS.LOG and SOPT.LOG parser-stress evidence.",
+        "",
         "PY86 .PY PARSER PERFORMANCE LAB - TANDY 1000 EX / NEC V20",
         "",
         "EXPERIMENTAL: standard PY86.EXE is not overwritten.",
@@ -92,6 +126,8 @@ def main():
         for mode, (executable, _, (exe, bat_name, demo_log, stress_log)) in verified.items():
             zipfile_out.write(executable, exe)
             zipfile_out.writestr(bat_name, bat(exe, demo_log, stress_log))
+        if "p1ka" in verified:
+            zipfile_out.writestr("RUN3.BAT", triple_bat())
     with zipfile.ZipFile(dst) as z:
         err = z.testzip()
         if err is not None:
