@@ -251,6 +251,7 @@ mp_lexer_t *mp_lexer_new_from_file(qstr filename) {
 #if defined(PY86_TEST_VMFAULT)
 #include "py/objfun.h"
 #include "py/bc.h"
+#include "py/bc0.h"
 static int py86_vm_fault_inject(mp_obj_t object) {
     const char *mode = getenv("PY86_VMFAULT");
     mp_obj_fun_bc_t *fun;
