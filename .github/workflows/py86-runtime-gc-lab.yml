@@ -125,12 +125,12 @@ jobs:
         if: always()
         shell: bash
         run: |
-          python ports/dos16/compare_parser_lab.py | tee -a "$GITHUB_STEP_SUMMARY"
+          python ports/dos16/compare_runtime_gc_lab.py | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Package four validated DOS binaries and test batches
         if: always()
         shell: bash
         run: |
-          python ports/dos16/package_parser_lab.py
+          python ports/dos16/package_runtime_gc_lab.py
           unzip -t ports/dos16/dist/PY86-RUNTIME-LAB.zip
       - name: Retain passing 8086 variants, DOS metrics, maps and failures
         if: always()
@@ -142,4 +142,4 @@ jobs:
           path: |
             ports/dos16/build/runtime-lab/**
             ports/dos16/build/compile-profile-runtime-*.json
-            ports/dos16/dist/PY86-PARSER-LAB.zip
+            ports/dos16/dist/PY86-RUNTIME-LAB.zip
