@@ -171,6 +171,7 @@ def main():
     source = a.source.resolve()
     assert subprocess.check_output(['git', '-C', str(source), 'rev-parse', 'HEAD'], text=True).strip() == SHA
     OUT.mkdir(parents=True, exist_ok=True)
+    (OUT / 'P29GC-AB.zip').unlink(missing_ok=True)
     selftest()
     gc_file, main_file = source / 'py/gc.c', PORT / 'port/main.c'
     gc_original, main_original = gc_file.read_bytes(), main_file.read_bytes()
@@ -224,6 +225,8 @@ def main():
 
 
 def summarize():
+    # A failed/rejected rerun must never leave an earlier qualified package.
+    (OUT / 'P29GC-AB.zip').unlink(missing_ok=True)
     data = {mode: [json.loads((OUT / ('gc129-' + mode + '-' + str(i) + '.json')).read_text())
                    for i in range(3)] for mode in ('base', 'batch')}
     report = {'baseline': 'P29OPT: 1.29.0 / 1KA / far128 / runtime-profile',
