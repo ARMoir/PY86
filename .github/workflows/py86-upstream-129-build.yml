@@ -1,0 +1,74 @@
+name: Py86 v1.29.0 DOS build and diagnostics
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [tandypy-dos16-port]
+    paths:
+      - .github/workflows/py86-upstream-129-build.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build-129:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Pin upstream MicroPython 1.29.0
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet --depth 1 --branch v1.29.0 \
+            https://github.com/micropython/micropython.git "$RUNNER_TEMP/mp129"
+          test "$(git -C "$RUNNER_TEMP/mp129" rev-parse HEAD)" = \
+            '0fd6c573ea815774668bbb16b8e197c8822368b2'
+      - name: Adapt old 16-bit compatibility patch, preserve every rejected hunk
+        shell: bash
+        run: |
+          set -euo pipefail
+          python ports/dos16/prepare_source_129.py \
+            --source "$RUNNER_TEMP/mp129" \
+            --report-dir ports/dos16/build/mp129-build \
+            --allow-rejects | tee ports/dos16/build/mp129-prepare.log
+          git -C "$RUNNER_TEMP/mp129" diff --stat \
+            > ports/dos16/build/mp129-build/changes.txt
+      - name: Install pinned Open Watcom
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-delay 5 \
+            https://github.com/open-watcom/open-watcom-v2/releases/download/2026-11-01-Build/ow-snapshot.tar.xz \
+            --output "$RUNNER_TEMP/ow.tar.xz"
+          mkdir -p "$RUNNER_TEMP/ow"
+          tar -xJf "$RUNNER_TEMP/ow.tar.xz" -C "$RUNNER_TEMP/ow"
+      - name: Attempt native Open Watcom C16 8086 build
+        shell: bash
+        run: |
+          set +e
+          python ports/dos16/build.py --source "$RUNNER_TEMP/mp129" \
+            --watcom "$RUNNER_TEMP/ow" --profile-compile \
+            --parser-alloc-mode original --compile-opt baseline \
+            > ports/dos16/build/mp129-build/build.log 2>&1
+          result=$?
+          echo "RESULT=$result" | tee ports/dos16/build/mp129-build/build-status.txt
+          tail -n 100 ports/dos16/build/mp129-build/build.log
+          if [ "$result" = 0 ] && [ -f ports/dos16/build/py86.exe ]; then
+            cp ports/dos16/build/py86.exe ports/dos16/build/mp129-build/P86V129.EXE
+            cp ports/dos16/build/py86.map ports/dos16/build/mp129-build/v129.map
+          fi
+          exit 0
+      - name: Upload patch rejects and compiler diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PY86-MicroPython-129-native-build-diagnostics
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            ports/dos16/build/mp129-build/**
+            ports/dos16/build/mp129-prepare.log
