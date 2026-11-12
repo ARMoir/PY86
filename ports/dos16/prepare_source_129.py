@@ -59,7 +59,7 @@ def main():
     (out/"patch-report.json").write_text(json.dumps(data,indent=2))
     (out/"patch-report.txt").write_text(
         "\n".join([("OK " if i["exit"]==0 else "REBASE ")+i["name"] for i in entries]+
-                  ["", "Rejected hunk files:"]+[f"{k}: {len(v)} bytes" for k,v in rejects])+"\n")
+                  ["", "Rejected hunk files:"]+[f"{k}: {len(v)} bytes" for k,v in rejects.items()])+"\n")
     if not data["all_resolved"] and not args.allow_rejects:
         raise SystemExit("Unresolved 1.29.0 compatibility changes; not safe to ship")
     return 0
