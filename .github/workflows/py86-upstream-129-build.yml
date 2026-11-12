@@ -69,6 +69,41 @@ jobs:
             cp ports/dos16/build/py86.map ports/dos16/build/mp129-build/v129.map
           fi
           exit 0
+      - name: Install pinned DOSBox Staging 0.83.0 for native regression
+        if: success()
+        shell: bash
+        run: |
+          if [ ! -f ports/dos16/build/mp129-build/P86V129.EXE ]; then exit 0; fi
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-delay 5 \
+            https://github.com/dosbox-staging/dosbox-staging/releases/download/v0.83.0/dosbox-staging-linux-x86_64-v0.83.0.tar.xz \
+            --output "$RUNNER_TEMP/dosbox.tar.xz"
+          echo 'd3a94f7f1c3e68a47ec88d61145506c7904452adb0c9c5928cb8cfe2331d6c5c  '"$RUNNER_TEMP/dosbox.tar.xz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/dosbox"
+          tar -xJf "$RUNNER_TEMP/dosbox.tar.xz" -C "$RUNNER_TEMP/dosbox"
+          exe="$(find "$RUNNER_TEMP/dosbox" -type f -name dosbox -print -quit)"
+          test -x "$exe"
+          echo "DOSBOX_STAGING=$exe" >> "$GITHUB_ENV"
+      - name: Full 8086 DOSBox regression for MicroPython 1.29.0
+        if: success()
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          if [ ! -f ports/dos16/build/mp129-build/P86V129.EXE ]; then
+            echo 'No 1.29.0 binary generated; cannot validate'
+            exit 1
+          fi
+          python ports/dos16/run_dos.py --dosbox "$DOSBOX_STAGING" \
+            --emulator staging --core-version 1.29.0 --timeout 360 \
+            > ports/dos16/build/mp129-build/full-dosbox.log 2>&1 || {
+              tail -n 100 ports/dos16/build/mp129-build/full-dosbox.log
+              exit 1
+            }
+          cp ports/dos16/build/test-results.json \
+            ports/dos16/build/mp129-build/full-dosbox-results.json
+          tail -n 50 ports/dos16/build/mp129-build/full-dosbox.log
       - name: Upload patch rejects and compiler diagnostics
         if: always()
         uses: actions/upload-artifact@v4
