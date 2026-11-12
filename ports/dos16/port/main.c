@@ -18,6 +18,11 @@
 #include "py/objlist.h"
 #include "py/builtin.h"
 #include "py86-version.h"
+#if defined(PY86_UPSTREAM_129)
+#define PY86_MP_VERSION "1.29.0"
+#else
+#define PY86_MP_VERSION "1.24.1"
+#endif
 
 /* From moddostime.c: opt-in cursor-home behavior for interactive redraws. */
 extern void py86_set_home_cls(int enabled);
@@ -139,7 +144,7 @@ static int py86_heap_allocate(void) {
 
 /* Keyboard interrupt support: SIGINT is deferred to safe VM boundaries. */
 const char py86_help_text[] =
-    "Py86: Python 3 for 16-bit DOS (MicroPython 1.24.1)\n"
+    "Py86: Python 3 for 16-bit DOS (MicroPython " PY86_MP_VERSION ")\n"
     "Commands: help(), help(obj), exit(), quit(), input(), print()\n"
     "Modules: os, sys, time, datetime, math, random, json, re, hashlib, gc, errno\n"
     "Run: PY86 SCRIPT.PY or PY86 for the interactive prompt.\n"
@@ -535,7 +540,7 @@ int main(int argc, char **argv) {
     if (argc > first_arg &&
         (strcmp(argv[first_arg], "-V") == 0 ||
          strcmp(argv[first_arg], "--version") == 0)) {
-        puts("Py86 " PY86_VERSION " (MicroPython 1.24.1, 16-bit DOS, 8086/V20)");
+        puts("Py86 " PY86_VERSION " (MicroPython " PY86_MP_VERSION ", 16-bit DOS, 8086/V20)");
         goto done;
     }
     if (argc > first_arg && strcmp(argv[first_arg], "-c") == 0) {
@@ -558,7 +563,7 @@ int main(int argc, char **argv) {
         mp_obj_list_append(mp_sys_path, MP_OBJ_NEW_QSTR(MP_QSTR_));
         mp_obj_list_append(mp_sys_argv, mp_obj_new_str("", 0));
         puts("Py86 " PY86_VERSION " (experimental) - Python 3 for 16-bit DOS");
-        puts("Based on MicroPython 1.24.1");
+        puts("Based on MicroPython " PY86_MP_VERSION);
         puts("Blank line ends a block; Ctrl-Z then Enter exits.");
         for (;;) {
             source[0] = 0;
