@@ -19,6 +19,10 @@ p.add_argument('--only', default='')
 p.add_argument('--string-mode', choices=('original', 'char-cache', 'lazy-hash', 'both'),
                default='both', help='String optimization (production default: both)')
 p.add_argument('--resume', action='store_true')
+p.add_argument('--parser-alloc-mode',
+               choices=('original', 'block512', 'block1024', 'block2048', 'geometric'),
+               default='original',
+               help='Opt-in parser syntax-tree arena strategy; requires parser_allocator_lab.py')
 p.add_argument('--parse-chunk', type=int, choices=(16, 32, 64, 128),
                default=16, help='Initial parse allocation chunk; opt-in benchmark')
 p.add_argument('--compile-opt', choices=('baseline', 'loop', 'intrinsic', 'all'),
@@ -124,6 +128,12 @@ def per_file_flags(c):
     selected = list(flags)
     if c.name in COMPILER_FILES:
         selected.extend(COMPILE_OPTS[args.compile_opt])
+    if c.name == 'parse.c' and args.parser_alloc_mode != 'original':
+        if 'PY86_PARSER_ALLOC_MODE' not in (src / 'py' / 'parse.c').read_text():
+            raise SystemExit('Apply parser_allocator_lab.py to the isolated pinned checkout first')
+        selected.append('-dPY86_PARSER_ALLOC_MODE=' + str({
+            'block512': 1, 'block1024': 2, 'block2048': 3, 'geometric': 4,
+        }[args.parser_alloc_mode]))
     if c.name == 'main.c':
         if args.source_loader == 'direct':
             selected.append('-dPY86_SOURCE_DIRECT=1')
