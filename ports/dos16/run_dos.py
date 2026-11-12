@@ -10,6 +10,8 @@ root = Path(__file__).resolve().parent
 p = argparse.ArgumentParser()
 p.add_argument('--dosbox', required=True)
 p.add_argument('--emulator', choices=('classic', 'staging'), default='classic')
+p.add_argument('--core-version', choices=('1.24.1','1.29.0'), default='1.24.1',
+               help='Version string expected in the optional 1.29.0 migration test')
 p.add_argument('--timeout', type=int, default=120)
 a = p.parse_args()
 version = (root / 'build' / 'py86-version.txt').read_text(encoding='ascii').strip()
@@ -93,8 +95,8 @@ required = {'SMOKE.OUT': ['PASS smoke'], 'METHOD.OUT': ['PASS methods'],
             'CARGS.OUT': ['PASS command_argv'],
             'CLIHELP.OUT': ['Usage: PY86', 'Ctrl+C'],
             'HELPFLAG.OUT': ['Usage: PY86'],
-            'VERSION.OUT': ['Py86 ' + version, 'MicroPython 1.24.1'],
-            'VERNAME.OUT': ['Py86 ' + version, 'MicroPython 1.24.1'],
+            'VERSION.OUT': ['Py86 ' + version, 'MicroPython ' + a.core_version],
+            'VERNAME.OUT': ['Py86 ' + version, 'MicroPython ' + a.core_version],
             'CTRLC.OUT': ['PASS ctrlc_keyboard_interrupt'],
             'CTRLSLP.OUT': ['PASS ctrlc_sleep_interrupt'],
             'CLOCK.OUT': ['   ~-------------~'],
