@@ -59,7 +59,7 @@ jobs:
           set +e
           python ports/dos16/build.py --source "$RUNNER_TEMP/mp129" \
             --watcom "$RUNNER_TEMP/ow" --profile-compile \
-            --parser-alloc-mode original --compile-opt baseline \
+            --core-version 1.29.0 --parser-alloc-mode original --compile-opt baseline \
             > ports/dos16/build/mp129-build/build.log 2>&1
           result=$?
           echo "RESULT=$result" | tee ports/dos16/build/mp129-build/build-status.txt
