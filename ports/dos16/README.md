@@ -919,3 +919,10 @@ file-copy avoidance. The production executable retains its defaults.
 The opt-in [parser A/B study and Tandy testing plan](PARSER_LAB.md) evaluates
 fixed syntax-tree blocks and geometric growth while retaining the original
 Python source files and unchanged production defaults.
+
+## Runtime profiling: parser versus compiler flags and GC
+
+The opt-in [V20 runtime and GC experiment](RUNTIME_GC_LAB.md) isolates
+parser-block allocation from compiler-only optimization flags, records
+GC time and heap state, and offers a forced pre-execution collection toggle.
+It runs normal `.PY` files unchanged and does not alter release defaults.
