@@ -103,6 +103,10 @@ required = {'SMOKE.OUT': ['PASS smoke'], 'METHOD.OUT': ['PASS methods'],
             'SHOW.OUT': ['PYTHON 3 FOR 16-BIT DOS', '[PASS] 8 LIVE EXAMPLES',
                          'Source: github.com/ARMoir/micropython'],
             'GC.OUT': ['PASS gc_roots'],
+            'COUNT16.OUT': ['COUNT16 iterations=65536 elapsed_ms=', 'PASS count16'],
+            'ROBUST.OUT': ['PASS buffer_bounds', 'PASS gc_canary', 'PASS robust_complete'],
+            'BADSYNT.OUT': ['SyntaxError:'],
+            'RECOV.OUT': ['PASS after_parse_error'],
             'MEMSIZE.OUT': ['PASS heap_gc', 'PASS heap_roots'],
             'MEMAUTO.OUT': ['heap_bytes=', 'mode=auto'],
             'MEM48.OUT': ['heap_bytes=48000', 'mode=fixed'],
@@ -123,6 +127,19 @@ required = {'SMOKE.OUT': ['PASS smoke'], 'METHOD.OUT': ['PASS methods'],
             'REPLCODE.OUT': ['PASS repl_exit_code_before']}
 missing = [f + ': ' + token for f, tokens in required.items() for token in tokens
            if token not in logs.get(f, '')]
+# The measurement must be produced by DOS PY86, with exactly one well-formed result.
+count_lines = [line for line in logs.get('COUNT16.OUT', '').splitlines()
+               if line.startswith('COUNT16 iterations=')]
+if len(count_lines) != 1:
+    missing.append('COUNT16.OUT: missing or duplicate measurement')
+else:
+    try:
+        fields = dict(item.split('=', 1) for item in count_lines[0].split()[1:])
+        if int(fields['iterations']) != 65536 or int(fields['elapsed_ms']) < 0:
+            missing.append('COUNT16.OUT: invalid count or timing')
+    except (KeyError, ValueError):
+        missing.append('COUNT16.OUT: malformed result')
+
 if any('FAIL ' in logs.get(name, '') for name in
        ('EXIT0.OUT', 'QUIT0.OUT', 'SYSEX0.OUT', 'SYSEX7.OUT',
         'SYSEX9.OUT', 'SYSEXTXT.OUT', 'REPLEX.OUT', 'REPLCODE.OUT')):
@@ -215,7 +232,7 @@ else:
     if demo_stdout.splitlines() != demo_text.splitlines():
         missing.append('DEMO.OUT and PY86.LOG transcripts differ')
 unexpected = [f for f, content in logs.items()
-              if ('Traceback' in content and f not in ('REPL.OUT', 'ERROR.OUT'))
+              if ('Traceback' in content and f not in ('REPL.OUT', 'ERROR.OUT', 'BADSYNT.OUT'))
               or (f == 'REPL.OUT' and any(x in content for x in ('SyntaxError', 'IndentationError', 'NameError')))]
 report = {'environment': 'DOSBox ' + a.emulator + ' built-in DOS; not physical V20',
           'version': version,
