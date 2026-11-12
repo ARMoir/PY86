@@ -19,6 +19,8 @@ p.add_argument('--only', default='')
 p.add_argument('--string-mode', choices=('original', 'char-cache', 'lazy-hash', 'both'),
                default='both', help='String optimization (production default: both)')
 p.add_argument('--resume', action='store_true')
+p.add_argument('--vm-fault-probe', action='store_true',
+               help='Also build test-only PY86F.EXE with bytecode fault injection (never release)')
 p.add_argument('--data-layout',
                choices=('production', 'far128', 'hotstate', 'medium'),
                default='production',
@@ -172,6 +174,21 @@ link = ['system dos', 'option quiet', 'option stack=16384', 'option map=py86.map
 (build / 'link.lnk').write_text('\n'.join(link) + '\n')
 print(run(['wlink', '@link.lnk'], build / 'link.log'))
 print('Built', build / 'py86.exe')
+
+if args.vm_fault_probe:
+    # Relink the EXACT production VM/GC objects with only a test-enabled main.
+    # This is not included in the DOS user package. It must stay in DOSBox.
+    fault_obj = build / 'mainfault.obj'
+    run(['wcc', *flags, '-dPY86_TEST_VMFAULT=1',
+         '-fo=' + str(fault_obj), ROOT / 'port/main.c'], build / 'mainfault.log')
+    fault_objects = [fault_obj.name if obj.name == 'main.obj' else obj.name
+                     for obj in objects]
+    fault_link = ['system dos', 'option quiet', 'option stack=16384',
+                  'option map=py86f.map', 'name py86f.exe',
+                  *['file ' + name for name in fault_objects]]
+    (build / 'fault-link.lnk').write_text('\\n'.join(fault_link) + '\\n')
+    run(['wlink', '@fault-link.lnk'], build / 'fault-link.log')
+    print('Built test-only, unsafe-on-real-hardware', build / 'py86f.exe')
 
 # Optional launcher for timing the DOS child MZ executable load itself.
 # It is a small 8086 executable, independent of MicroPython and its heap.
