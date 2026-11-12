@@ -31,6 +31,8 @@ p.add_argument('--source-loader', choices=('original', 'direct'), default='origi
                help='DOS source file loader; direct is experimental')
 p.add_argument('--profile-compile', action='store_true',
                help='Include opt-in BIOS-tick compile timing, enabled by PY86_PROFILE=1')
+p.add_argument('--runtime-profile', action='store_true',
+               help='Log GC collections and memory around Python execution; includes compile profile')
 p.add_argument('--vm-fault-probe', action='store_true',
                help='Also build test-only PY86F.EXE with bytecode fault injection (never release)')
 p.add_argument('--data-layout',
@@ -137,8 +139,10 @@ def per_file_flags(c):
     if c.name == 'main.c':
         if args.source_loader == 'direct':
             selected.append('-dPY86_SOURCE_DIRECT=1')
-        if args.profile_compile:
+        if args.profile_compile or args.runtime_profile:
             selected.append('-dPY86_COMPILE_PROFILE=1')
+        if args.runtime_profile:
+            selected.append('-dPY86_RUNTIME_PROFILE=1')
     return selected
 
 def run(cmd, output=None):
