@@ -31,6 +31,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p ports/dos16/build
           python ports/dos16/prepare_source_129.py \
             --source "$RUNNER_TEMP/mp129" \
             --report-dir ports/dos16/build/mp129-build \
