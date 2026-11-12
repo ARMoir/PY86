@@ -1,0 +1,133 @@
+name: py86pkg host converter checks (manual only)
+
+# Paused: no automatic converter builds. Keep manual dispatch available
+# for a deliberate test; restore push/PR triggers when development resumes.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: py86pkg-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  host-tests:
+    name: Host converter tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '${{ matrix.python-version }}'
+      - run: python -m py_compile tools/py86pkg/py86pkg.py
+      - run: python -m unittest discover -s tools/py86pkg/tests -v
+      - name: Verify editable install CLI
+        run: |
+          python -m pip install --no-deps -e tools/py86pkg
+          py86pkg --help
+
+  roman-dosbox:
+    name: Convert roman 5.2 and run with Py86 in DOSBox
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Convert the actual PyPI roman 5.2 package
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/py86pkg/py86pkg.py convert \
+            https://pypi.org/project/roman/5.2/ --library-only \
+            --output "$RUNNER_TEMP/ROMAN.ZIP"
+
+      - name: Get pinned MicroPython 1.24.1 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet --depth 1 --branch v1.24.1 \
+            https://github.com/micropython/micropython.git "$RUNNER_TEMP/micropython-1.24.1"
+          actual="$(git -C "$RUNNER_TEMP/micropython-1.24.1" rev-parse HEAD)"
+          test "$actual" = "ecfdd5d6f9be971852003c2049600dc7b3e2a838"
+
+      - name: Get pinned Open Watcom snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-delay 5 \
+            'https://github.com/open-watcom/open-watcom-v2/releases/download/2026-11-01-Build/ow-snapshot.tar.xz' \
+            --output "$RUNNER_TEMP/ow-snapshot.tar.xz"
+          mkdir -p "$RUNNER_TEMP/watcom"
+          tar -xJf "$RUNNER_TEMP/ow-snapshot.tar.xz" -C "$RUNNER_TEMP/watcom"
+          test -x "$RUNNER_TEMP/watcom/binl64/wcc"
+          test -x "$RUNNER_TEMP/watcom/binl64/wlink"
+
+      - name: Build Py86 unchanged from pinned sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          python ports/dos16/prepare_source.py --source "$RUNNER_TEMP/micropython-1.24.1"
+          python ports/dos16/build.py \
+            --source "$RUNNER_TEMP/micropython-1.24.1" \
+            --watcom "$RUNNER_TEMP/watcom"
+
+      - name: Obtain pinned DOSBox Staging (no Ubuntu mirrors)
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-delay 4 \
+            'https://github.com/dosbox-staging/dosbox-staging/releases/download/v0.83.0/dosbox-staging-linux-x86_64-v0.83.0.tar.xz' \
+            --output "$RUNNER_TEMP/dosbox-staging.tar.xz"
+          echo 'd3a94f7f1c3e68a47ec88d61145506c7904452adb0c9c5928cb8cfe2331d6c5c  '"$RUNNER_TEMP/dosbox-staging.tar.xz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/dosbox-staging"
+          tar -xJf "$RUNNER_TEMP/dosbox-staging.tar.xz" -C "$RUNNER_TEMP/dosbox-staging"
+          find "$RUNNER_TEMP/dosbox-staging" -type f -name dosbox -print
+          exe="$(find "$RUNNER_TEMP/dosbox-staging" -type f -name dosbox -print -quit)"
+          test -n "$exe"
+          chmod +x "$exe"
+          echo "DOSBOX_STAGING=$exe" >> "$GITHUB_ENV"
+          "$exe" --version
+
+      - name: Execute converted roman through Py86
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          set -euo pipefail
+          python tools/py86pkg/run_roman_dosbox.py \
+            --archive "$RUNNER_TEMP/ROMAN.ZIP" \
+            --py86 ports/dos16/build/py86.exe \
+            --dosbox "$DOSBOX_STAGING" --emulator staging \
+            --out "$RUNNER_TEMP/roman-dosbox" --timeout 300
+
+      - name: Upload converted Roman package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: py86pkg-roman-converted
+          path: ${{ runner.temp }}/ROMAN.ZIP
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload Roman DOSBox output and report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: py86pkg-roman-dosbox-logs
+          path: |
+            ${{ runner.temp }}/roman-dosbox/roman-dosbox-report.json
+            ${{ runner.temp }}/roman-dosbox/emulator.log
+            ${{ runner.temp }}/roman-dosbox/stage/ROMAN.OUT
+            ${{ runner.temp }}/roman-dosbox/stage/RESULT.TXT
+          if-no-files-found: warn
+          retention-days: 14

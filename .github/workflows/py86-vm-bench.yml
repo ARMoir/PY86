@@ -1,0 +1,98 @@
+name: Py86 8086 VM and segmented-memory experiment
+
+# The comprehensive A/B study is opt-in. Production build + benchmark
+# and DOSBox regression tests still run on each branch push.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    name: Compare dispatch, compiler optimization and data placement
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install DOSBox and retrieve pinned MicroPython
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends dosbox xvfb xauth
+          git clone --quiet --depth 1 --branch v1.24.1 \
+            https://github.com/micropython/micropython.git "$RUNNER_TEMP/mp124"
+          test "$(git -C "$RUNNER_TEMP/mp124" rev-parse HEAD)" = \
+            "ecfdd5d6f9be971852003c2049600dc7b3e2a838"
+          python ports/dos16/prepare_source.py --source "$RUNNER_TEMP/mp124"
+      - name: Install exact 16-bit Open Watcom compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-delay 5 \
+            'https://github.com/open-watcom/open-watcom-v2/releases/download/2026-11-01-Build/ow-snapshot.tar.xz' \
+            --output "$RUNNER_TEMP/ow.tar.xz"
+          mkdir -p "$RUNNER_TEMP/ow"
+          tar -xJf "$RUNNER_TEMP/ow.tar.xz" -C "$RUNNER_TEMP/ow"
+          test -x "$RUNNER_TEMP/ow/binl64/wcc"
+      - name: Build, regression-test and benchmark each VM variant
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ports/dos16
+          python -m py_compile build.py run_dos.py run_bench.py compare_vmbench.py
+          for mode in baseline fast-decode compiler far128 near384 combined; do
+            echo "::group::VM mode: $mode"
+            if ! python build.py --source "$RUNNER_TEMP/mp124" \
+              --watcom "$RUNNER_TEMP/ow" --vm-mode "$mode"; then
+              echo "::warning::VM candidate $mode did not compile/link"
+              if [ "$mode" = baseline ]; then exit 1; fi
+              echo "$mode: COMPILATION/LINK FAILURE" >> build/vm-failures.txt
+              echo "::endgroup::"
+              continue
+            fi
+            cp build/py86.map "build/vm-$mode.map"
+            if ! xvfb-run -a python run_dos.py \
+              --dosbox "$(command -v dosbox)" --timeout 300 \
+              > "build/vm-$mode-correctness.log"; then
+              echo "::warning::VM candidate $mode failed correctness tests"
+              if [ "$mode" = baseline ]; then exit 1; fi
+              echo "$mode: DOSBOX CORRECTNESS FAILURE" >> build/vm-failures.txt
+              echo "::endgroup::"
+              continue
+            fi
+            if ! xvfb-run -a python run_bench.py --vm-tests \
+              --dosbox "$(command -v dosbox)" --mode "vm-$mode" --timeout 300; then
+              echo "::warning::VM candidate $mode failed performance test"
+              if [ "$mode" = baseline ]; then exit 1; fi
+              echo "$mode: BENCHMARK FAILURE" >> build/vm-failures.txt
+              echo "::endgroup::"
+              continue
+            fi
+            echo "::endgroup::"
+          done
+      - name: Compare 8086 VM performance and segment placement
+        shell: bash
+        run: |
+          set -euo pipefail
+          python ports/dos16/compare_vmbench.py | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Publish metrics and linker maps
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PY86-VM-experiment
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            ports/dos16/build/benchmark-vm-*.json
+            ports/dos16/build/vm-comparison.md
+            ports/dos16/build/vm-*.map
+            ports/dos16/build/vm-*.log
+            ports/dos16/build/vm-failures.txt
+            ports/dos16/build/bench-emulator.log
+            ports/dos16/bench-test/*.OUT
+            ports/dos16/dos-test/*.OUT

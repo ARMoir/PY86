@@ -1,0 +1,134 @@
+name: Py86 medium and hybrid near-data memory experiment
+
+on:
+  push:
+    branches: [tandypy-dos16-port]
+    paths:
+      - '.github/workflows/py86-memory-model-lab.yml'
+      - 'ports/dos16/memory_model_lab.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: py86-memory-model-experiment-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  study:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Prepare pinned MicroPython source and near-state annotation
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet --depth 1 --branch v1.24.1 \
+            https://github.com/micropython/micropython.git "$RUNNER_TEMP/mp124"
+          test "$(git -C "$RUNNER_TEMP/mp124" rev-parse HEAD)" = \
+            'ecfdd5d6f9be971852003c2049600dc7b3e2a838'
+          python ports/dos16/prepare_source.py --source "$RUNNER_TEMP/mp124"
+          python ports/dos16/memory_model_lab.py patch-source "$RUNNER_TEMP/mp124"
+
+      - name: Install pinned Watcom snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-delay 5 \
+            'https://github.com/open-watcom/open-watcom-v2/releases/download/2026-11-01-Build/ow-snapshot.tar.xz' \
+            --output "$RUNNER_TEMP/ow.tar.xz"
+          mkdir -p "$RUNNER_TEMP/watcom"
+          tar -xJf "$RUNNER_TEMP/ow.tar.xz" -C "$RUNNER_TEMP/watcom"
+          test -x "$RUNNER_TEMP/watcom/binl64/wcc"
+
+      - name: Install pinned DOSBox Staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-delay 5 \
+            'https://github.com/dosbox-staging/dosbox-staging/releases/download/v0.83.0/dosbox-staging-linux-x86_64-v0.83.0.tar.xz' \
+            --output "$RUNNER_TEMP/dosbox.tar.xz"
+          echo 'd3a94f7f1c3e68a47ec88d61145506c7904452adb0c9c5928cb8cfe2331d6c5c  '"$RUNNER_TEMP/dosbox.tar.xz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/dosbox"
+          tar -xJf "$RUNNER_TEMP/dosbox.tar.xz" -C "$RUNNER_TEMP/dosbox"
+          exe="$(find "$RUNNER_TEMP/dosbox" -type f -name dosbox -print -quit)"
+          test -x "$exe"
+          echo "DOSBOX_STAGING=$exe" >> "$GITHUB_ENV"
+
+      - name: Build and test each 8086 memory model
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          set -euo pipefail
+          python -m py_compile ports/dos16/build.py ports/dos16/memory_model_lab.py \
+            ports/dos16/run_dos.py ports/dos16/run_bench.py
+          mkdir -p ports/dos16/build/memory-lab
+          for layout in production far128 hotstate medium; do
+            echo "::group::8086 data layout: $layout"
+            if ! python ports/dos16/build.py --source "$RUNNER_TEMP/mp124" \
+              --watcom "$RUNNER_TEMP/watcom" --data-layout "$layout" \
+              > "ports/dos16/build/memory-lab/$layout-build.log" 2>&1; then
+              echo "::warning::$layout build failed"
+              tail -n 65 "ports/dos16/build/memory-lab/$layout-build.log"
+              echo "$layout: COMPILE_OR_LINK_FAILED" >> ports/dos16/build/memory-lab/failures.txt
+              if [ "$layout" = production ]; then exit 1; fi
+              echo "::endgroup::"
+              continue
+            fi
+            cp ports/dos16/build/py86.exe "ports/dos16/build/memory-lab/PY86-$layout.EXE"
+            cp ports/dos16/build/py86.map "ports/dos16/build/memory-lab/$layout.map"
+            if ! python ports/dos16/run_dos.py --dosbox "$DOSBOX_STAGING" \
+              --emulator staging --timeout 300 \
+              > "ports/dos16/build/memory-lab/$layout-test.log" 2>&1; then
+              echo "::warning::$layout DOSBox compatibility failed"
+              tail -n 30 "ports/dos16/build/memory-lab/$layout-test.log"
+              echo "$layout: DOSBOX_TEST_FAILED" >> ports/dos16/build/memory-lab/failures.txt
+              cp ports/dos16/build/test-results.json \
+                "ports/dos16/build/memory-lab/$layout-test-results.json" || true
+              if [ "$layout" = production ]; then exit 1; fi
+              echo "::endgroup::"
+              continue
+            fi
+            cp ports/dos16/build/test-results.json \
+              "ports/dos16/build/memory-lab/$layout-test-results.json"
+            if ! python ports/dos16/run_bench.py --dosbox "$DOSBOX_STAGING" \
+              --emulator staging --vm-tests --heap 48000 \
+              --mode "memory-$layout" --timeout 300 \
+              > "ports/dos16/build/memory-lab/$layout-bench.log" 2>&1; then
+              echo "::warning::$layout benchmarks failed"
+              tail -n 35 "ports/dos16/build/memory-lab/$layout-bench.log"
+              echo "$layout: BENCHMARK_FAILED" >> ports/dos16/build/memory-lab/failures.txt
+              if [ "$layout" = production ]; then exit 1; fi
+            else
+              echo "PASS complete DOSBox suite and 13 benchmarks: $layout"
+            fi
+            echo "::endgroup::"
+          done
+
+      - name: Compare verified model performance
+        if: always()
+        shell: bash
+        run: |
+          python ports/dos16/memory_model_lab.py summary ports/dos16/build \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload experimental builds, maps and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PY86-8086-memory-model-lab
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            ports/dos16/build/memory-lab/**
+            ports/dos16/build/benchmark-memory-*.json
+            ports/dos16/build/*.log
+            ports/dos16/dos-test/*.OUT

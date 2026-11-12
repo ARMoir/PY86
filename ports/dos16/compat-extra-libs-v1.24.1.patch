@@ -1,0 +1,134 @@
+diff --git a/extmod/modhashlib.c b/extmod/modhashlib.c
+index 4754e44..d16e715 100644
+--- a/extmod/modhashlib.c
++++ b/extmod/modhashlib.c
+@@ -61,7 +61,7 @@
+ typedef struct _mp_obj_hash_t {
+     mp_obj_base_t base;
+     bool final; // if set, update and digest raise an exception
+-    uintptr_t state[0]; // must be aligned to a machine word
++    uintptr_t state[]; // must be aligned to a machine word
+ } mp_obj_hash_t;
+ 
+ static void hashlib_ensure_not_final(mp_obj_hash_t *self) {
+diff --git a/extmod/modjson.c b/extmod/modjson.c
+index e655a02..6128d17 100644
+--- a/extmod/modjson.c
++++ b/extmod/modjson.c
+@@ -145,9 +145,7 @@ static byte json_stream_next(json_stream_t *s) {
+     return s->cur;
+ }
+ 
+-static mp_obj_t mod_json_load(mp_obj_t stream_obj) {
+-    const mp_stream_p_t *stream_p = mp_get_stream_raise(stream_obj, MP_STREAM_OP_READ);
+-    json_stream_t s = {stream_obj, stream_p->read, 0, 0};
++static mp_obj_t py86_json_parse(json_stream_t s) {
+     vstr_t vstr;
+     vstr_init(&vstr, 8);
+     mp_obj_list_t stack; // we use a list as a simple stack for nested JSON
+@@ -355,14 +353,48 @@ success:
+ fail:
+     mp_raise_ValueError(MP_ERROR_TEXT("syntax error in JSON"));
+ }
++/* DOS port: JSON string parsing must not depend on the optional io module.
++ * The normal stream-based json.load() remains available for stream objects. */
++typedef struct _py86_json_mem_t {
++    const byte *data;
++    size_t length;
++    size_t pos;
++} py86_json_mem_t;
++
++static mp_uint_t py86_json_mem_read(mp_obj_t obj, void *dest, mp_uint_t len, int *err) {
++    py86_json_mem_t *m = MP_OBJ_TO_PTR(obj);
++    size_t remaining = m->length - m->pos;
++    (void)err;
++    if (len > remaining) len = remaining;
++    if (len) memcpy(dest, m->data + m->pos, len);
++    m->pos += len;
++    return len;
++}
++
++static mp_obj_t mod_json_load(mp_obj_t stream_obj) {
++    const mp_stream_p_t *stream_p = mp_get_stream_raise(stream_obj, MP_STREAM_OP_READ);
++    json_stream_t s;
++    s.stream_obj = stream_obj;
++    s.read = stream_p->read;
++    s.errcode = 0;
++    s.cur = 0;
++    return py86_json_parse(s);
++}
+ static MP_DEFINE_CONST_FUN_OBJ_1(mod_json_load_obj, mod_json_load);
+ 
+ static mp_obj_t mod_json_loads(mp_obj_t obj) {
+     mp_buffer_info_t bufinfo;
++    py86_json_mem_t mem;
++    json_stream_t s;
+     mp_get_buffer_raise(obj, &bufinfo, MP_BUFFER_READ);
+-    vstr_t vstr = {bufinfo.len, bufinfo.len, (char *)bufinfo.buf, true};
+-    mp_obj_stringio_t sio = {{&mp_type_stringio}, &vstr, 0, MP_OBJ_NULL};
+-    return mod_json_load(MP_OBJ_FROM_PTR(&sio));
++    mem.data = bufinfo.buf;
++    mem.length = bufinfo.len;
++    mem.pos = 0;
++    s.stream_obj = MP_OBJ_FROM_PTR(&mem);
++    s.read = py86_json_mem_read;
++    s.errcode = 0;
++    s.cur = 0;
++    return py86_json_parse(s);
+ }
+ static MP_DEFINE_CONST_FUN_OBJ_1(mod_json_loads_obj, mod_json_loads);
+ 
+diff --git a/extmod/modre.c b/extmod/modre.c
+index 1a11800..67900e0 100644
+--- a/extmod/modre.c
++++ b/extmod/modre.c
+@@ -54,7 +54,7 @@ typedef struct _mp_obj_match_t {
+     mp_obj_base_t base;
+     int num_matches;
+     mp_obj_t str;
+-    const char *caps[0];
++    const char *caps[];
+ } mp_obj_match_t;
+ 
+ static mp_obj_t mod_re_compile(size_t n_args, const mp_obj_t *args);
+diff --git a/lib/crypto-algorithms/sha256.c b/lib/crypto-algorithms/sha256.c
+index ce03772..7f6070d 100644
+--- a/lib/crypto-algorithms/sha256.c
++++ b/lib/crypto-algorithms/sha256.c
+@@ -46,7 +46,7 @@ static void sha256_transform(CRYAL_SHA256_CTX *ctx, const BYTE data[])
+ 	WORD a, b, c, d, e, f, g, h, i, j, t1, t2, m[64];
+ 
+ 	for (i = 0, j = 0; i < 16; ++i, j += 4)
+-		m[i] = ((uint32_t)data[j] << 24) | (data[j + 1] << 16) | (data[j + 2] << 8) | (data[j + 3]);
++		m[i] = ((uint32_t)data[j] << 24) | ((uint32_t)data[j + 1] << 16) | ((uint32_t)data[j + 2] << 8) | ((uint32_t)data[j + 3]);
+ 	for ( ; i < 64; ++i)
+ 		m[i] = SIG1(m[i - 2]) + m[i - 7] + SIG0(m[i - 15]) + m[i - 16];
+ 
+diff --git a/lib/crypto-algorithms/sha256.h b/lib/crypto-algorithms/sha256.h
+index 9c19472..90f8c59 100644
+--- a/lib/crypto-algorithms/sha256.h
++++ b/lib/crypto-algorithms/sha256.h
+@@ -18,7 +18,9 @@
+ 
+ /**************************** DATA TYPES ****************************/
+ typedef unsigned char BYTE;             // 8-bit byte
+-typedef unsigned int  WORD;             // 32-bit word, change to "long" for 16-bit machines
++/* Open Watcom 16-bit int is 16 bits; SHA-256 requires 32-bit words. */
++#include <stdint.h>
++typedef uint32_t WORD;             // 32-bit word, change to "long" for 16-bit machines
+ 
+ typedef struct {
+ 	BYTE data[64];
+diff --git a/lib/re1.5/re1.5.h b/lib/re1.5/re1.5.h
+index b1ec01c..4cf0e44 100644
+--- a/lib/re1.5/re1.5.h
++++ b/lib/re1.5/re1.5.h
+@@ -64,7 +64,7 @@ struct ByteProg
+ 	int bytelen;
+ 	int len;
+ 	int sub;
+-	char insts[0];
++	char insts[];
+ };
+ 
+ struct Inst

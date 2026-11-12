@@ -1,0 +1,93 @@
+name: Py86 Open Watcom compiler flag isolation
+
+# The full compiler A/B suite is manually dispatched to save CI cycles.
+# Normal pushes still run the production DOSBox regression/benchmark job.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    name: Baseline / -oe / -oi / -ol / -oh / combined
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install DOSBox and clone pinned MicroPython
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends dosbox xvfb xauth
+          git clone --quiet --depth 1 --branch v1.24.1 \
+            https://github.com/micropython/micropython.git "$RUNNER_TEMP/mp124"
+          test "$(git -C "$RUNNER_TEMP/mp124" rev-parse HEAD)" = \
+            "ecfdd5d6f9be971852003c2049600dc7b3e2a838"
+          python ports/dos16/prepare_source.py --source "$RUNNER_TEMP/mp124"
+      - name: Install Open Watcom 2026-11-01 snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-delay 5 \
+            'https://github.com/open-watcom/open-watcom-v2/releases/download/2026-11-01-Build/ow-snapshot.tar.xz' \
+            --output "$RUNNER_TEMP/ow.tar.xz"
+          mkdir -p "$RUNNER_TEMP/ow"
+          tar -xJf "$RUNNER_TEMP/ow.tar.xz" -C "$RUNNER_TEMP/ow"
+          test -x "$RUNNER_TEMP/ow/binl64/wcc"
+      - name: Execute six compiler flag variants and DOSBox tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ports/dos16
+          python -m py_compile build.py run_bench.py run_dos.py compare_vmflags.py
+          for mode in baseline inline intrinsic loop reopt compiler; do
+            echo "::group::Open Watcom mode: $mode"
+            if ! python build.py --source "$RUNNER_TEMP/mp124" \
+              --watcom "$RUNNER_TEMP/ow" --vm-mode "$mode"; then
+              echo "::warning::$mode build failed"
+              if [ "$mode" = baseline ]; then exit 1; fi
+              echo "$mode: BUILD FAILED" >> build/flags-failures.txt
+              echo "::endgroup::"
+              continue
+            fi
+            cp build/py86.map "build/flags-$mode.map"
+            if ! xvfb-run -a python run_dos.py \
+              --dosbox "$(command -v dosbox)" --timeout 300 > "build/flags-$mode-tests.log"; then
+              echo "::warning::$mode correctness failed"
+              if [ "$mode" = baseline ]; then exit 1; fi
+              echo "$mode: CORRECTNESS FAILED" >> build/flags-failures.txt
+              echo "::endgroup::"
+              continue
+            fi
+            if ! xvfb-run -a python run_bench.py --vm-tests \
+              --dosbox "$(command -v dosbox)" --mode "flags-$mode" --timeout 300; then
+              echo "::warning::$mode benchmark failed"
+              if [ "$mode" = baseline ]; then exit 1; fi
+              echo "$mode: BENCHMARK FAILED" >> build/flags-failures.txt
+              echo "::endgroup::"
+              continue
+            fi
+            echo "::endgroup::"
+          done
+      - name: Compare compiler flags
+        run: python ports/dos16/compare_vmflags.py | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Archive results and link maps
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PY86-compiler-flags
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            ports/dos16/build/benchmark-flags-*.json
+            ports/dos16/build/compiler-flags-comparison.md
+            ports/dos16/build/flags-*.map
+            ports/dos16/build/flags-*.log
+            ports/dos16/build/flags-failures.txt
+            ports/dos16/build/bench-emulator.log
+            ports/dos16/bench-test/*.OUT

@@ -1,0 +1,77 @@
+name: Py86 lookup optimization experiment
+
+# The comprehensive A/B study is opt-in. Production build + benchmark
+# and DOSBox regression tests still run on each branch push.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    name: Baseline vs map cache vs attr fast path vs both
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install emulator and Python runtime prerequisites
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends dosbox xvfb xauth
+      - name: Fetch pinned MicroPython source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet --depth 1 --branch v1.24.1 \
+            https://github.com/micropython/micropython.git "$RUNNER_TEMP/mp124"
+          test "$(git -C "$RUNNER_TEMP/mp124" rev-parse HEAD)" = \
+            "ecfdd5d6f9be971852003c2049600dc7b3e2a838"
+          python ports/dos16/prepare_source.py --source "$RUNNER_TEMP/mp124"
+      - name: Install pinned Open Watcom 16-bit compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 \
+            'https://github.com/open-watcom/open-watcom-v2/releases/download/2026-11-01-Build/ow-snapshot.tar.xz' \
+            --output "$RUNNER_TEMP/open-watcom.tar.xz"
+          mkdir -p "$RUNNER_TEMP/ow"
+          tar -xJf "$RUNNER_TEMP/open-watcom.tar.xz" -C "$RUNNER_TEMP/ow"
+          test -x "$RUNNER_TEMP/ow/binl64/wcc"
+      - name: Compile, correctness-test and benchmark four 8086-safe variants
+        shell: bash
+        run: |
+          set -euo pipefail
+          for mode in off map attr both; do
+            echo "::group::Py86 lookup variant: $mode"
+            python ports/dos16/build.py \
+              --source "$RUNNER_TEMP/mp124" \
+              --watcom "$RUNNER_TEMP/ow" --lookup-mode "$mode"
+            xvfb-run -a python ports/dos16/run_dos.py \
+              --dosbox "$(command -v dosbox)" --timeout 300 \
+              > "$RUNNER_TEMP/correctness-$mode.log"
+            xvfb-run -a python ports/dos16/run_bench.py \
+              --dosbox "$(command -v dosbox)" --mode "$mode" --timeout 240
+            echo "::endgroup::"
+          done
+      - name: Compare fixed-cycle DOSBox results
+        shell: bash
+        run: |
+          set -euo pipefail
+          python ports/dos16/compare_bench.py | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Upload benchmark comparison and per-variant metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PY86-lookup-comparison
+          retention-days: 30
+          if-no-files-found: warn
+          path: |
+            ports/dos16/build/benchmark-*.json
+            ports/dos16/build/lookup-comparison.*
+            ports/dos16/bench-test/*.OUT
+            ports/dos16/build/bench-emulator.log
+            ports/dos16/build/test-results.json
