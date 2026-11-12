@@ -21,11 +21,16 @@ def run_case(dosbox, emulator, seconds, name):
     shutil.copy2(ROOT / "tests" / "FAULTSRC.PY", stage / "FAULTSRC.PY")
     for filename in ("OUT.TXT", "CODE.TXT", "DONE.TXT"):
         (stage / filename).unlink(missing_ok=True)
-    env_line = "" if name == "normal" else "set PY86_VMFAULT=" + name + "\r\n"
+    env_line = ("set PY86_VMFAULT=\r\n" if name == "normal"
+                else "set PY86_VMFAULT=" + name + "\r\n")
     batch = ("@echo off\r\n" + env_line +
              "PY86F FAULTSRC.PY > OUT.TXT\r\n" +
-             "if errorlevel 1 echo NONZERO > CODE.TXT\r\n" +
-             "if not errorlevel 1 echo ZERO > CODE.TXT\r\n" +
+             "if errorlevel 1 goto nonzero\r\n" +
+             "echo ZERO > CODE.TXT\r\n" +
+             "goto statusdone\r\n" +
+             ":nonzero\r\n" +
+             "echo NONZERO > CODE.TXT\r\n" +
+             ":statusdone\r\n" +
              "echo COMPLETE > DONE.TXT\r\n")
     (stage / "CASE.BAT").write_bytes(batch.encode("ascii"))
     video = "[sdl]\nfullscreen=false\n" if emulator == "staging" else (
