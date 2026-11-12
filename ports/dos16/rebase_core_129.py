@@ -85,12 +85,12 @@ def adapt_new_core(root:Path):
     # syntax rejects labels unless a statement precedes them.
     src=root/"py/lexer.c"
     data=src.read_text()
-    data=one(data,"\nfetch_next_byte:\n","\n    ;\nfetch_next_byte:\n")
+    data=one(data,"\nfetch_next_byte:\n","\n;\n;\n;\n;\n;\n;\nfetch_next_byte:\n")
     src.write_text(data)
 
     src=root/"py/formatfloat.c"
     data=src.read_text()
-    data=one(data,"\ntry_again:\n    ;\n","\n    ;\ntry_again:\n    ;\n")
+    data=one(data,"\ntry_again:\n    ;\n","\n;\n;\n;\n;\n;\n;\ntry_again:\n    ;\n")
     src.write_text(data)
 
     src=root/"py/parsenum.c"
