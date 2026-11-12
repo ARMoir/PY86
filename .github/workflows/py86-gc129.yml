@@ -1,0 +1,61 @@
+name: P29OPT 1KA isolated GC root batching
+on:
+  push:
+    branches: [codex/p29opt-gc-roots]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  gc129:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Prepare only the validated pinned 1.29.0 1KA baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet --depth 1 --branch v1.29.0 https://github.com/micropython/micropython.git "$RUNNER_TEMP/mp129"
+          test "$(git -C "$RUNNER_TEMP/mp129" rev-parse HEAD)" = '0fd6c573ea815774668bbb16b8e197c8822368b2'
+          python ports/dos16/prepare_source_129.py --source "$RUNNER_TEMP/mp129" --report-dir ports/dos16/build/gc129
+          python ports/dos16/parser_allocator_lab.py patch-source "$RUNNER_TEMP/mp129"
+      - name: Install reproducible 16-bit Open Watcom
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-delay 5 \
+            https://github.com/open-watcom/open-watcom-v2/releases/download/2026-11-01-Build/ow-snapshot.tar.xz \
+            --output "$RUNNER_TEMP/ow.tar.xz"
+          mkdir -p "$RUNNER_TEMP/ow"
+          tar -xJf "$RUNNER_TEMP/ow.tar.xz" -C "$RUNNER_TEMP/ow"
+          test -x "$RUNNER_TEMP/ow/binl64/wcc"
+      - name: Install pinned DOSBox Staging 0.83
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-delay 5 \
+            https://github.com/dosbox-staging/dosbox-staging/releases/download/v0.83.0/dosbox-staging-linux-x86_64-v0.83.0.tar.xz \
+            --output "$RUNNER_TEMP/dosbox.tar.xz"
+          echo 'd3a94f7f1c3e68a47ec88d61145506c7904452adb0c9c5928cb8cfe2331d6c5c  '"$RUNNER_TEMP/dosbox.tar.xz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/dosbox"
+          tar -xJf "$RUNNER_TEMP/dosbox.tar.xz" -C "$RUNNER_TEMP/dosbox"
+          exe="$(find "$RUNNER_TEMP/dosbox" -type f -name dosbox -print -quit)"
+          test -x "$exe"
+          echo "DOSBOX_STAGING=$exe" >> "$GITHUB_ENV"
+      - name: Build both, run full regressions and alternate automatic A-B profiles
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+          PY86_VERSION: 0.26.11.0
+        run: |
+          python tools/py86pkg/gc129_lab.py --source "$RUNNER_TEMP/mp129" --watcom "$RUNNER_TEMP/ow" --dosbox "$DOSBOX_STAGING"
+      - name: Retain experimental builds and measured evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: P29OPT-GC129-evidence
+          retention-days: 30
+          path: ports/dos16/build/gc129/**
