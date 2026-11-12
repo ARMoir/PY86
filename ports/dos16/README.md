@@ -913,3 +913,9 @@ The opt-in [compilation profiling and real-hardware V20 test plan](COMPILATION_L
 measures lexer, parser and bytecode compilation stages for unchanged .PY
 files, and compares parser sizes, targeted Watcom compiler settings and
 file-copy avoidance. The production executable retains its defaults.
+
+## Parser allocator optimization on NEC V20
+
+The opt-in [parser A/B study and Tandy testing plan](PARSER_LAB.md) evaluates
+fixed syntax-tree blocks and geometric growth while retaining the original
+Python source files and unchanged production defaults.
