@@ -122,6 +122,12 @@ jobs:
         shell: bash
         run: |
           python ports/dos16/compare_compile_lab.py | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Package passing 8.3-compatible Tandy V20 A/B binaries
+        if: always()
+        shell: bash
+        run: |
+          python -m py_compile ports/dos16/package_compile_lab.py
+          python ports/dos16/package_compile_lab.py
       - name: Upload experimental executables, maps, timing and test evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -133,3 +139,4 @@ jobs:
             ports/dos16/build/compile-lab/**
             ports/dos16/build/compile-profile-*.json
             ports/dos16/build/compile-profile-emulator.log
+            ports/dos16/dist/PY86-COMPILE-LAB.zip
