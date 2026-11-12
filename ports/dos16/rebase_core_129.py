@@ -80,6 +80,36 @@ TRANSFORMS = {
     "py/parsenum.c":parsenum,"py/runtime.h":runtime,"py/stream.c":stream,
 }
 
+def adapt_new_core(root:Path):
+    # 1.29 moved labels after local declarations; Watcom's mixed C99
+    # syntax rejects labels unless a statement precedes them.
+    src=root/"py/lexer.c"
+    data=src.read_text()
+    data=one(data,"\nfetch_next_byte:\n","\n    ;\nfetch_next_byte:\n")
+    src.write_text(data)
+
+    src=root/"py/formatfloat.c"
+    data=src.read_text()
+    data=one(data,"\ntry_again:\n    ;\n","\n    ;\ntry_again:\n    ;\n")
+    src.write_text(data)
+
+    src=root/"py/parsenum.c"
+    data=src.read_text()
+    data=one(data,"mp_float_union_t res = {num};",
+             "mp_float_union_t res; res.f = num;")
+    src.write_text(data)
+
+    src=root/"py/vm.c"
+    data=src.read_text()
+    old="mp_obj_slice_t slice = { .base = { .type = &mp_type_slice }, .start = start, .stop = stop, .step = step };"
+    new=("mp_obj_slice_t slice; slice.base.type = &mp_type_slice; "
+         "slice.start = start; slice.stop = stop; slice.step = step;")
+    data=one(data,old,new)
+    src.write_text(data)
+    for item in ("py/lexer.c","py/formatfloat.c","py/parsenum.c","py/vm.c"):
+        print("REBASED 1.29 new core",item,flush=True)
+
+
 def rebase(root:Path, report:Path):
     root=root.resolve()
     report.mkdir(parents=True,exist_ok=True)
@@ -98,5 +128,6 @@ def rebase(root:Path, report:Path):
         (root/(name+".rej")).unlink()
         results.append(name)
         print("REBASED",name,flush=True)
+    adapt_new_core(root)
     (report/"rebased-files.txt").write_text("\n".join(results)+"\n")
     return results
