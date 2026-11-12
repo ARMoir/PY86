@@ -906,3 +906,10 @@ To test the selection on a real DOS machine run `PY86 --heap-info`.
 For conservative operation use `SET PY86_HEAP=48000`; restore adaptive
 operation with `SET PY86_HEAP=`. This preserves the original proven size
 without rebuilding. A low-memory DOS installation may select a smaller heap.
+
+## Source compilation speed experiments
+
+The opt-in [compilation profiling and real-hardware V20 test plan](COMPILATION_LAB.md)
+measures lexer, parser and bytecode compilation stages for unchanged .PY
+files, and compares parser sizes, targeted Watcom compiler settings and
+file-copy avoidance. The production executable retains its defaults.
