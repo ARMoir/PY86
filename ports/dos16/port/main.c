@@ -33,6 +33,10 @@ static int py86_exit_requested;
 #if defined(PY86_COMPILE_PROFILE)
 static int py86_profile_enabled;
 static unsigned long py86_profile_read_ms;
+#if defined(PY86_RUNTIME_PROFILE)
+static unsigned long py86_gc_runtime_ms;
+static unsigned py86_gc_runtime_calls;
+#endif
 static unsigned long py86_profile_ticks(void) {
     union REGS in_regs, out_regs;
     memset(&in_regs, 0, sizeof(in_regs));
@@ -211,6 +215,9 @@ void mp_hal_stdout_tx_str(const char *s) { mp_hal_stdout_tx_strn(s, strlen(s)); 
 void gc_collect(void) {
     jmp_buf regs;
     char *p;
+    #if defined(PY86_RUNTIME_PROFILE)
+    unsigned long gc_begin = py86_profile_enabled ? py86_profile_ticks() : 0;
+    #endif
     /* Watcom stack entries are only 2-byte aligned; far roots are 4 bytes.
        setjmp spills the callee-saved registers before scanning SS==DGROUP. */
     setjmp(regs);
@@ -221,6 +228,12 @@ void gc_collect(void) {
         gc_collect_root(&root, 1);
     }
     gc_collect_end();
+    #if defined(PY86_RUNTIME_PROFILE)
+    if (py86_profile_enabled) {
+        py86_gc_runtime_ms += py86_profile_elapsed(gc_begin, py86_profile_ticks());
+        ++py86_gc_runtime_calls;
+    }
+    #endif
 }
 
 mp_import_stat_t mp_import_stat(const char *path) {
@@ -350,6 +363,14 @@ static int execute(const char *source, int file, mp_parse_input_kind_t kind) {
     #if defined(PY86_COMPILE_PROFILE)
     unsigned long t0 = 0, t1 = 0, t2 = 0, t3 = 0, t4 = 0;
     unsigned long read_ms = 0;
+    #if defined(PY86_RUNTIME_PROFILE)
+    unsigned long prep_ms = 0;
+    unsigned long forced_gc_ms = 0;
+    unsigned pre_gc_free = 0;
+    unsigned post_gc_free = 0;
+    unsigned runtime_gc_calls = 0;
+    unsigned long runtime_gc_ms = 0;
+    #endif
     py86_profile_enabled = getenv("PY86_PROFILE") != NULL;
     if (py86_profile_enabled) {
         py86_profile_read_ms = 0;
@@ -374,13 +395,47 @@ static int execute(const char *source, int file, mp_parse_input_kind_t kind) {
         #if defined(PY86_COMPILE_PROFILE)
         if (py86_profile_enabled) t3 = py86_profile_ticks();
         #endif
+        #if defined(PY86_RUNTIME_PROFILE)
+        if (py86_profile_enabled) {
+            gc_info_t pre;
+            unsigned long prep_begin = py86_profile_ticks();
+            gc_info(&pre);
+            pre_gc_free = (unsigned)pre.free;
+            /* Optional pre-execution GC: does not affect parsing or
+             * bytecode. The compiled function stays rooted on the stack. */
+            if (getenv("PY86_PREEXEC_GC") != NULL) {
+                unsigned long collect_begin = py86_profile_ticks();
+                gc_collect();
+                forced_gc_ms = py86_profile_elapsed(collect_begin, py86_profile_ticks());
+            }
+            gc_info(&pre);
+            post_gc_free = (unsigned)pre.free;
+            prep_ms = py86_profile_elapsed(prep_begin, py86_profile_ticks());
+            /* Count only collections performed while Python executes. */
+            py86_gc_runtime_calls = 0;
+            py86_gc_runtime_ms = 0;
+        }
+        #endif
         #if defined(PY86_TEST_VMFAULT)
         if (py86_vm_fault_inject(fun) != 0) {
             nlr_pop();
             return 4;
         }
         #endif
+        #if defined(PY86_RUNTIME_PROFILE)
+        if (py86_profile_enabled) {
+            /* Exclude deliberate preparation/GC overhead from exec_ms.
+             * P86RUNT reports prep_ms so full duration remains measurable. */
+            t3 = py86_profile_ticks();
+        }
+        #endif
         mp_call_function_0(fun);
+        #if defined(PY86_RUNTIME_PROFILE)
+        if (py86_profile_enabled) {
+            runtime_gc_calls = py86_gc_runtime_calls;
+            runtime_gc_ms = py86_gc_runtime_ms;
+        }
+        #endif
         nlr_pop();
         #if defined(PY86_COMPILE_PROFILE)
         if (py86_profile_enabled) {
@@ -394,6 +449,11 @@ static int execute(const char *source, int file, mp_parse_input_kind_t kind) {
                 py86_profile_elapsed(t2, t3),
                 py86_profile_elapsed(t3, t4),
                 (unsigned)gi.free);
+            #if defined(PY86_RUNTIME_PROFILE)
+            printf("P86RUNT gc_calls=%u gc_ms=%lu free_pre=%u free_post=%u prep_ms=%lu forced_gc_ms=%lu\n",
+                runtime_gc_calls, runtime_gc_ms, pre_gc_free, post_gc_free,
+                prep_ms, forced_gc_ms);
+            #endif
         }
         #endif
         return 0;
