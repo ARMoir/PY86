@@ -7,6 +7,15 @@ py86 CORE.PY > CORE.OUT
 if errorlevel 1 goto fail
 py86 GC.PY > GC.OUT
 if errorlevel 1 goto fail
+py86 COUNT16.PY > COUNT16.OUT
+if errorlevel 1 goto fail
+py86 ROBUST.PY > ROBUST.OUT
+if errorlevel 1 goto fail
+py86 BADSYNT.PY > BADSYNT.OUT
+if not errorlevel 1 goto fail
+if errorlevel 2 goto fail
+py86 -c "print('PASS after_parse_error')" > RECOV.OUT
+if errorlevel 1 goto fail
 set PY86_HEAP=48000
 py86 --heap-info > MEM48.OUT
 if errorlevel 1 goto fail
