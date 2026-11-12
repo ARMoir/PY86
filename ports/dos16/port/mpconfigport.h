@@ -84,6 +84,7 @@ void py86_vm_hook_loop(void);
 typedef long mp_int_t;
 typedef unsigned long mp_uint_t;
 typedef long mp_off_t;
+#define MP_NORETURN __declspec(noreturn)
 #define NORETURN __declspec(noreturn)
 #define MP_WEAK
 #define MP_NOINLINE
