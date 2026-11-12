@@ -136,7 +136,7 @@ Record the output from a physical V20 separately; the GitHub Actions result
 is an emulator measurement, **not** a physical 7 MHz result.
 
 The normal DOSBox integration suite also runs `tests/ROBUST.PY` to check
-positive/negative bytearray, bytes and memoryview bounds, GC pressure and
+positive/negative bytearray and bytes bounds (and memoryview when available), GC pressure and
 retained sentinel data. It checks that invalid `BADSYNT.PY` is rejected with
 a syntax error and that a subsequent Python invocation still runs. These
 are **public-API boundary tests**, not proof that native memory corruption
