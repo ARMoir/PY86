@@ -19,19 +19,26 @@ def bad_write(container, index):
 # Both ends, empty buffers, positive and negative out-of-range addresses.
 for length in (0, 1, 16, 97):
     data = bytearray(length)
-    view = memoryview(data)
+    view = None
+    try:
+        view = memoryview(data)
+    except NameError:
+        pass  # memoryview is omitted from this Py86 build.
     raw = bytes(data)
     for index in (-length - 1, length, length + 1000, -length - 1000):
         bad_index(data, index)
-        bad_index(view, index)
+        if view is not None:
+            bad_index(view, index)
         bad_index(raw, index)
         bad_write(data, index)
-        bad_write(view, index)
+        if view is not None:
+            bad_write(view, index)
     if length:
         data[0] = 165
         data[-1] = 90
         assert data[0] == 90 if length == 1 else data[0] == 165
-        assert view[-1] == 90
+        if view is not None:
+            assert view[-1] == 90
 print("PASS buffer_bounds")
 
 # Object roots and sentinel contents must survive repeated heap pressure.
