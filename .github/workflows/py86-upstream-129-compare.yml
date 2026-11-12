@@ -174,7 +174,7 @@ jobs:
           assert len(vhd)==16777216+512, len(vhd)
           assert vhd[-512:-504]==b'conectix', 'Missing fixed-VHD footer'
           raw=vhd[:-512]
-          assert raw[510:512]==b'\\x55\\xaa', 'Missing MBR'
+          assert raw[510:512]==bytes((0x55, 0xaa)), 'Missing MBR'
           (folder/'PY86V129.IMG').write_bytes(raw)
           print('PASS fixed VHD raw sectors converted into 16MiB CF IMG')
           PY
