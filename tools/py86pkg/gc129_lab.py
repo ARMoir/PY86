@@ -176,6 +176,12 @@ def main():
     gc_original, main_original = gc_file.read_bytes(), main_file.read_bytes()
     patched_gc = patch_gc(gc_original.decode().replace('\r\n', '\n'))
     patched_main = patch_main(main_original.decode().replace('\r\n', '\n'))
+    profile_script = PORT / 'run_gc129_profile.py'
+    if profile_script.exists():
+        raise RuntimeError('Refusing to overwrite an existing temporary profile runner')
+    # Use the existing verifier unchanged, at 1/10 speed to reduce BIOS-tick
+    # quantisation. The generated runner is never a production source change.
+    profile_script.write_text((PORT / 'run_compile_lab.py').read_text().replace('20000', '2000'))
     (OUT / 'candidate-gc.c').write_text(patched_gc)
     (OUT / 'candidate-main.c').write_text(patched_main)
     try:
@@ -204,7 +210,7 @@ def main():
                 for dest in (PORT / 'build/py86.exe', PORT / 'dos-test/PY86.EXE'):
                     shutil.copy2(OUT / exe, dest)
                 name = 'gc129-' + mode + '-' + str(trial)
-                run(sys.executable, PORT / 'run_compile_lab.py', '--dosbox', a.dosbox,
+                run(sys.executable, profile_script, '--dosbox', a.dosbox,
                     '--emulator', 'staging', '--timeout', '360', '--parser-stress',
                     '--runtime-stress', '--mode', name, log=name + '.log')
                 shutil.copy2(PORT / ('build/compile-profile-' + name + '.json'), OUT / (name + '.json'))
@@ -214,15 +220,21 @@ def main():
     finally:
         gc_file.write_bytes(gc_original)
         main_file.write_bytes(main_original)
+        profile_script.unlink()
 
 
 def summarize():
     data = {mode: [json.loads((OUT / ('gc129-' + mode + '-' + str(i) + '.json')).read_text())
                    for i in range(3)] for mode in ('base', 'batch')}
     report = {'baseline': 'P29OPT: 1.29.0 / 1KA / far128 / runtime-profile',
-              'core_sha': SHA, 'environment': 'DOSBox Staging 0.83 normal core, fixed 20000 cycles; NOT V20 hardware timing',
+              'core_sha': SHA, 'environment': 'DOSBox Staging 0.83 normal core, fixed 2000 cycles; NOT V20 hardware timing',
+              'native_root_probe_cases_per_build': 189,
               'samples': {}, 'hardware_test_qualified': False}
     gates = []
+    expected_samples = {'PDEM1.OUT', 'PDEM2.OUT', 'PCLK.OUT', 'PSHOW.OUT', 'PSTRES.OUT', 'RUNTST.OUT'}
+    for profiles in data.values():
+        for profile in profiles:
+            assert set(profile['samples']) == expected_samples
     for sample in data['base'][0]['samples']:
         rows = {m: [d['samples'][sample] for d in data[m]] for m in data}
         metrics = {}
@@ -237,10 +249,15 @@ def summarize():
         same_calls = metrics['gc_calls']['base'] == metrics['gc_calls']['batch']
         same_heap = all(metrics[n]['base'] == metrics[n]['batch'] for n in ('free_pre', 'free_post'))
         no_slowdown = statistics.median(metrics['exec_ms']['batch']) <= statistics.median(metrics['exec_ms']['base']) + 55
-        if sample in ('PDEM1.OUT', 'PDEM2.OUT', 'RUNTST.OUT'):
-            gates.append(same_calls and same_heap and no_slowdown and base_gc - new_gc >= 110
+        combined = {m: statistics.median(r['exec_ms'] + r['startup_total_ms'] for r in rows[m]) for m in rows}
+        gates.append(same_calls and same_heap and no_slowdown and combined['batch'] <= combined['base'] + 55)
+        # RUNTST deliberately performs no GC: require no regression there,
+        # not an impossible GC speedup from a zero-duration measurement.
+        if sample in ('PDEM1.OUT', 'PDEM2.OUT'):
+            gates.append(base_gc - new_gc >= 110
                          and metrics['gc_gain_percent'] >= 5
-                         and max(metrics['gc_ms']['batch']) < min(metrics['gc_ms']['base']))
+                         and max(metrics['gc_ms']['batch']) < min(metrics['gc_ms']['base'])
+                         and min(metrics['exec_ms']['base']) - max(metrics['exec_ms']['batch']) >= 110)
         report['samples'][sample] = metrics
     report['hardware_test_qualified'] = all(gates)
     report['executables'] = {n: {'bytes': (OUT / n).stat().st_size,
@@ -263,11 +280,8 @@ def summarize():
             for n in ('P29OPT.EXE', 'P29GC.EXE', 'RESULTS.txt', 'results.json'):
                 z.write(OUT / n, n)
             z.write(PORT / 'examples/DEMO.PY', 'DEMO.PY')
-            # DEMO imports these shipped example support modules.
-            for f in (PORT / 'dos-test').glob('*.py'):
-                if f.name.upper() != 'DEMO.PY':
-                    z.write(f, f.name)
             z.writestr('RUNGC.BAT', batch)
+            z.writestr('README.TXT', 'Experimental 1.29.0 / 1KA GC A-B only.\r\nExtract to a separate directory on your existing DOS drive.\r\nRun RUNGC once and return BASE.LOG and GC.LOG.\r\nDo not replace stable PY86.EXE. DOSBox gain is not a V20 measurement.\r\n')
 
 
 if __name__ == '__main__':
