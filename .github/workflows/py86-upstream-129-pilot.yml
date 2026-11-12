@@ -1,0 +1,64 @@
+name: Py86 MicroPython v1.29.0 compatibility pilot
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [tandypy-dos16-port]
+    paths:
+      - .github/workflows/py86-upstream-129-pilot.yml
+
+permissions:
+  contents: read
+
+jobs:
+  migration-audit:
+    name: Audit 16-bit source compatibility before an upstream upgrade
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Fetch pinned MicroPython 1.29.0 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet --depth 1 --branch v1.29.0 \
+            https://github.com/micropython/micropython.git "$RUNNER_TEMP/mp129"
+          test "$(git -C "$RUNNER_TEMP/mp129" rev-parse HEAD)" = \
+            '0fd6c573ea815774668bbb16b8e197c8822368b2'
+      - name: Audit existing DOS 16-bit patches for API and source drift
+        shell: bash
+        run: |
+          set -euo pipefail
+          python ports/dos16/compare_upstream_129.py \
+            --source "$RUNNER_TEMP/mp129" \
+            --report ports/dos16/build/mp129-pilot/compat-report.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path('ports/dos16/build/mp129-pilot/compat-report.json')
+          data=json.loads(p.read_text())
+          rows=['# MicroPython v1.29.0 DOS compatibility audit',
+                '', 'Exact upstream commit: `'+data['upstream_commit']+'`', '',
+                '| 1.24.1 compatibility patch | Applies cleanly to 1.29? |',
+                '|---|---|']
+          for patch in data['patches']:
+              rows.append('| '+patch['patch']+' | '+('Yes' if patch['clean'] else 'No: rebase required')+' |')
+          rows+=['', 'This check does not build or validate a 1.29.0 DOS EXE.',
+                 'Any non-applying patch needs source-level porting with full',
+                 '16-bit memory and VM validation before comparing performance.']
+          summary='\n'.join(rows)
+          print(summary)
+          Path('ports/dos16/build/mp129-pilot/SUMMARY.md').write_text(summary+'\n')
+          PY
+          cat ports/dos16/build/mp129-pilot/SUMMARY.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Package migration findings without changing production
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PY86-MicroPython-129-upgrade-audit
+          retention-days: 30
+          if-no-files-found: warn
+          path: ports/dos16/build/mp129-pilot/**
