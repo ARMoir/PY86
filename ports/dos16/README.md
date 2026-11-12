@@ -1,9 +1,9 @@
 # Py86: Python 3 for 16-bit DOS
 
 **Py86** is an experimental Python 3 interpreter for 16-bit MS-DOS, based on
-**MicroPython 1.24.1**. It targets Intel 8086/8088-class CPUs and compatibles,
+**MicroPython 1.29.0** for releases from `main`. It targets Intel 8086/8088-class CPUs and compatibles,
 including NEC V20 machines such as the Tandy 1000 EX.
-It was developed and tested separately from the current `master` branch.
+Development and validated GC batching now live on `main`; historical 1.24.1 work is retained for reference.
 
 **Status:** experimental 16-bit Open Watcom build. GitHub Actions now
 rebuilds and packages Py86 successfully. The original PythonClock has run on
@@ -11,7 +11,21 @@ physical Tandy 1000 EX hardware, but the newly expanded modules have not yet
 been tested there. Older archived DOSBox tests reported `PASS`; these were
 not a fresh emulator test of the expanded module build.
 
-## Versioning and source changes
+## Release pipeline (main branch, November 2026)
+
+The production release builds **MicroPython 1.29.0 + 1KA + batched GC root
+scanning**. The pinned source is adapted by `prepare_source_129.py`, the 1 KB
+parser by `parser_allocator_lab.py`, and the GC root batching by
+`prepare_release_gc129.py`. The complete native DOSBox suite and VM-fault
+tests must pass before the release ZIP is uploaded.
+
+Releases are created **only from `main`**. When a new release is published
+and its downloadable ZIP is verified, GitHub Actions deletes all other GitHub
+Releases, their assets and associated release tags. Git commit history is
+preserved. This cleanup is destructive: earlier release downloads cannot
+be recovered from the GitHub Releases page.
+
+## Historical 1.24.1 migration notes (not the current release process)
 
 The port requires an exact checkout of **MicroPython v1.24.1**, commit
 `ecfdd5d6f9be971852003c2049600dc7b3e2a838`. **Do not apply the patch to current

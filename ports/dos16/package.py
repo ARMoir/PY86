@@ -53,7 +53,7 @@ README = (
     "\r\n"
     "On slow machines, tests may take some time.\r\n"
     "Requires DOS-compatible conventional memory and an 8086/V20 CPU.\r\n"
-    "Experimental MicroPython 1.24.1 DOS port; not full CPython.\r\n"
+    "MicroPython 1.29.0 / 1KB optimized parser / batched GC roots; not CPython.\r\n"
 )
 RUNCLK = "@echo off\r\ncls\r\nPY86 --home-cls CLOCK.PY\r\n"
 RUNSHOW = "@echo off\r\ncls\r\nPY86 SHOW.PY\r\n"

@@ -1,23 +1,23 @@
-name: Py86 DOS + PythonClock package
+name: Py86 1.29.0 1KA GC main release (single retained release)
 
 on:
   push:
-    branches:
-      - tandypy-dos16-port
-      - master
-    paths-ignore:
-      - 'tools/py86pkg/**'
-      - '.github/workflows/py86pkg.yml'
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: write  # Required to create a release tag and upload the versioned ZIP.
 
+concurrency:
+  group: py86-release-main
+  cancel-in-progress: false
+
 jobs:
   package:
-    name: Build PY86.EXE and package PythonClock
+    if: github.ref == 'refs/heads/main'
+    name: Build, validate, release 1.29.0/1KA-GC and purge older releases
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
 
@@ -40,20 +40,24 @@ jobs:
         run: |
           python -m py_compile \
             ports/dos16/build.py \
-            ports/dos16/prepare_source.py \
+            ports/dos16/prepare_source_129.py \
+            ports/dos16/rebase_core_129.py \
+            ports/dos16/parser_allocator_lab.py \
+            ports/dos16/prepare_release_gc129.py \
+            tools/py86pkg/gc129_lab.py \
             ports/dos16/package.py \
             ports/dos16/gen_clock.py \
             ports/dos16/run_dos.py \
             ports/dos16/run_vm_fault.py
 
-      - name: Get pinned MicroPython 1.24.1 source
+      - name: Get pinned MicroPython 1.29.0 source
         shell: bash
         run: |
           set -euo pipefail
-          git clone --quiet --depth 1 --branch v1.24.1 \
-            https://github.com/micropython/micropython.git "$RUNNER_TEMP/micropython-1.24.1"
-          actual="$(git -C "$RUNNER_TEMP/micropython-1.24.1" rev-parse HEAD)"
-          test "$actual" = "ecfdd5d6f9be971852003c2049600dc7b3e2a838"
+          git clone --quiet --depth 1 --branch v1.29.0 \
+            https://github.com/micropython/micropython.git "$RUNNER_TEMP/micropython-1.29.0"
+          actual="$(git -C "$RUNNER_TEMP/micropython-1.29.0" rev-parse HEAD)"
+          test "$actual" = "0fd6c573ea815774668bbb16b8e197c8822368b2"
 
       - name: Install pinned Open Watcom snapshot (Linux x64)
         shell: bash
@@ -67,18 +71,32 @@ jobs:
           test -x "$RUNNER_TEMP/watcom/binl64/wcc"
           test -x "$RUNNER_TEMP/watcom/binl64/wlink"
 
-      - name: Apply 16-bit DOS compatibility patch
+      - name: Apply 1.29.0 DOS patches, 1KB parser and validated GC batching
         shell: bash
         run: |
-          python ports/dos16/prepare_source.py --source "$RUNNER_TEMP/micropython-1.24.1"
+          set -euo pipefail
+          python ports/dos16/prepare_source_129.py \
+            --source "$RUNNER_TEMP/micropython-1.29.0" \
+            --report-dir ports/dos16/build/release129
+          python ports/dos16/parser_allocator_lab.py patch-source "$RUNNER_TEMP/micropython-1.29.0"
+          python ports/dos16/prepare_release_gc129.py \
+            --source "$RUNNER_TEMP/micropython-1.29.0"
 
-      - name: Build native 16-bit DOS executable
+      - name: Build qualified MicroPython 1.29.0 1KA + GC for 8086/V20
         shell: bash
         run: |
+          set -euo pipefail
           python ports/dos16/build.py \
-            --source "$RUNNER_TEMP/micropython-1.24.1" \
+            --source "$RUNNER_TEMP/micropython-1.29.0" \
             --watcom "$RUNNER_TEMP/watcom" \
+            --core-version 1.29.0 \
+            --parser-alloc-mode block1024 \
+            --compile-opt all \
+            --data-layout far128 \
+            --runtime-profile \
             --vm-fault-probe
+          test -s ports/dos16/build/py86.exe
+          grep -q PY86_GC129_APPLIED ports/dos16/build/release-gc-source.txt
 
       # Use the same pinned portable DOSBox Staging binary that succeeded for
       # py86pkg Roman tests; avoid intermittent Ubuntu apt mirror DNS failures.
@@ -106,7 +124,7 @@ jobs:
         run: |
           set -euo pipefail
           python ports/dos16/run_dos.py \
-            --dosbox "$DOSBOX_STAGING" --emulator staging --timeout 300
+            --dosbox "$DOSBOX_STAGING" --emulator staging --core-version 1.29.0 --timeout 300
           python - <<'PY'
           import json, os
           from pathlib import Path
@@ -137,7 +155,7 @@ jobs:
             ports/dos16/dos-test/BADSYNT.OUT
             ports/dos16/build/vm-fault-results.json
 
-      - name: Measure production Py86 performance (DOSBox Staging)
+      - name: Measure 1.29.0 GC production performance (DOSBox Staging)
         shell: bash
         env:
           SDL_VIDEODRIVER: dummy
@@ -176,7 +194,7 @@ jobs:
             ports/dos16/dos-test/ONECLK.OUT
             ports/dos16/dos-test/PY86.LOG
 
-      - name: Package optimized single-file clock, feature demo and standard interpreter
+      - name: Package optimized 1.29.0 1KA-GC release, PythonClock and feature demo
         shell: bash
         run: |
           python ports/dos16/package.py
@@ -200,7 +218,23 @@ jobs:
           unzip -t "ports/dos16/dist/PY86-${PY86_VERSION}.zip"
           test -f ports/dos16/dist/PY86/PY86.EXE
 
-      - name: Publish GitHub Release for this successful build
+      - name: Check this run is still the current main branch head
+        id: current_head
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          actual="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq '.commit.sha')"
+          if [ "$actual" = "$GITHUB_SHA" ]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping release from obsolete main commit $GITHUB_SHA (now $actual)"
+          fi
+
+      - name: Publish GitHub Release for this successful current main build
+        if: steps.current_head.outputs.publish == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -210,7 +244,10 @@ jobs:
           Automated Py86 16-bit DOS release **${PY86_VERSION}**.
 
           - Built from commit \`${GITHUB_SHA}\` on branch \`${GITHUB_REF_NAME}\`.
-          - Source: MicroPython 1.24.1 with Py86 DOS compatibility patches.
+          - Source: MicroPython **1.29.0** (pinned SHA 0fd6c573ea815774668bbb16b8e197c8822368b2) with Py86 8086 DOS compatibility patches.
+          - **1KA**: 1 KB parse-tree arena plus compiler-only Open Watcom flags.
+          - **GC root batching**: tested 2-byte overlapping pointer-window traversal, preserving conservative 16-bit far-pointer roots.
+          - Near-data layout: far128; GC instrumentation available with PY86_PROFILE=1.
           - Includes standard uncompressed PY86.EXE, generated CLOCK.PY, DEMO.PY and one-screen SHOW.PY.
           - RUNSHOW displays 8 live feature examples within 80x25 DOS screen limits.
           - RUNCLK and RUNTEST launch PY86.EXE directly.
@@ -228,3 +265,69 @@ jobs:
           gh release create "$PY86_TAG" "ports/dos16/dist/PY86-${PY86_VERSION}.zip" \
             --title "Py86 ${PY86_VERSION}" --notes-file "$RUNNER_TEMP/RELEASE_NOTES.md" \
             --target "$GITHUB_SHA" --latest
+
+      - name: Verify published release asset matches tested build
+        if: steps.current_head.outputs.publish == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/release-verification"
+          for attempt in 1 2 3 4 5; do
+            if gh release download "$PY86_TAG" \
+                 --pattern "PY86-${PY86_VERSION}.zip" \
+                 --dir "$RUNNER_TEMP/release-verification"; then
+              break
+            fi
+            sleep $((attempt * 2))
+          done
+          cmp "ports/dos16/dist/PY86-${PY86_VERSION}.zip" \
+              "$RUNNER_TEMP/release-verification/PY86-${PY86_VERSION}.zip"
+          tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$PY86_TAG" --jq '.object.sha')"
+          test "$tag_sha" = "$GITHUB_SHA"
+          echo "PASS GitHub release asset and tag match tested main SHA $GITHUB_SHA"
+
+      - name: Permanently delete EVERY older GitHub Release, its assets and its release tag
+        if: steps.current_head.outputs.publish == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mapfile -t obsolete < <(
+            gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+              --jq '.[].tag_name' | grep -vxF -- "$PY86_TAG" || true
+          )
+          echo "Deleting ${#obsolete[@]} obsolete GitHub releases and their tags."
+          for tag in "${obsolete[@]}"; do
+            if [ -z "$tag" ]; then continue; fi
+            deleted=false
+            for attempt in 1 2 3 4 5; do
+              if gh release delete "$tag" --yes --cleanup-tag; then
+                deleted=true
+                break
+              fi
+              echo "Retry $attempt deleting release $tag"
+              sleep $((attempt * 4))
+            done
+            if [ "$deleted" != true ]; then
+              echo "::error::Could not completely remove release and tag $tag"
+              exit 1
+            fi
+          done
+          mapfile -t remaining < <(
+            gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[].tag_name'
+          )
+          if [ "${#remaining[@]}" -ne 1 ] || [ "${remaining[0]}" != "$PY86_TAG" ]; then
+            printf 'Unexpected releases remaining: %s\n' "${remaining[*]}"
+            exit 1
+          fi
+          for tag in "${obsolete[@]}"; do
+            if [ -n "$tag" ] && gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null 2>&1; then
+              echo "::error::Old Git tag $tag still exists"
+              exit 1
+            fi
+          done
+          echo "PASS: one GitHub release, one associated release tag, and no older release downloads"
+          echo "Only release retained: $PY86_TAG" >> "$GITHUB_STEP_SUMMARY"
