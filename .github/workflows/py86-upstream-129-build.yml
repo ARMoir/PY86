@@ -27,6 +27,11 @@ jobs:
             https://github.com/micropython/micropython.git "$RUNNER_TEMP/mp129"
           test "$(git -C "$RUNNER_TEMP/mp129" rev-parse HEAD)" = \
             '0fd6c573ea815774668bbb16b8e197c8822368b2'
+      - name: Rebase 10 C16 compatibility conflicts on 1.29.0, without modifying 1.24.1
+        # This is an isolated source checkout and fail-closed rebase.
+        shell: bash
+        run: |
+          python -m py_compile ports/dos16/prepare_source_129.py ports/dos16/rebase_core_129.py
       - name: Adapt old 16-bit compatibility patch, preserve every rejected hunk
         shell: bash
         run: |
