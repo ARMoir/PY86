@@ -43,7 +43,8 @@ jobs:
             ports/dos16/prepare_source.py \
             ports/dos16/package.py \
             ports/dos16/gen_clock.py \
-            ports/dos16/run_dos.py
+            ports/dos16/run_dos.py \
+            ports/dos16/run_vm_fault.py
 
       - name: Get pinned MicroPython 1.24.1 source
         shell: bash
@@ -76,7 +77,8 @@ jobs:
         run: |
           python ports/dos16/build.py \
             --source "$RUNNER_TEMP/micropython-1.24.1" \
-            --watcom "$RUNNER_TEMP/watcom"
+            --watcom "$RUNNER_TEMP/watcom" \
+            --vm-fault-probe
 
       # Use the same pinned portable DOSBox Staging binary that succeeded for
       # py86pkg Roman tests; avoid intermittent Ubuntu apt mirror DNS failures.
@@ -114,6 +116,27 @@ jobs:
           print('PASS release version and DOSBox tests:', data['version'])
           PY
 
+      - name: Characterize corrupted VM bytecode in isolated DOSBox processes
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          python ports/dos16/run_vm_fault.py \
+            --dosbox "$DOSBOX_STAGING" --emulator staging --timeout 35
+
+      - name: Upload count benchmark and VM integrity diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: PY86-count-and-VM-integrity
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            ports/dos16/dos-test/COUNT16.OUT
+            ports/dos16/dos-test/ROBUST.OUT
+            ports/dos16/dos-test/BADSYNT.OUT
+            ports/dos16/build/vm-fault-results.json
+
       - name: Measure production Py86 performance (DOSBox Staging)
         shell: bash
         env:
@@ -141,6 +164,9 @@ jobs:
           path: |
             ports/dos16/build/emulator.log
             ports/dos16/build/test-results.json
+            ports/dos16/build/vm-fault-results.json
+            ports/dos16/build/fault-*.log
+            ports/dos16/fault-test/*/*.TXT
             ports/dos16/build/bench-emulator.log
             ports/dos16/bench-test/*.OUT
             ports/dos16/dos-test/*.OUT
@@ -188,6 +214,7 @@ jobs:
           - Includes standard uncompressed PY86.EXE, generated CLOCK.PY, DEMO.PY and one-screen SHOW.PY.
           - RUNSHOW displays 8 live feature examples within 80x25 DOS screen limits.
           - RUNCLK and RUNTEST launch PY86.EXE directly.
+          - RUNCOUNT measures the full -32768..32767 counting loop on DOS.
           - Optional RUNLOAD uses START86 to measure DOS child-launch timing.
           - Original PythonClock sources remain unchanged in the repository.
           - RUNTEST showcases language features, built-in modules and DOS file I/O; it writes PY86.LOG.
