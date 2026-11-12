@@ -146,7 +146,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y -qq mtools dosfstools
+          sudo apt-get install -y -qq mtools dosfstools qemu-utils nbd-client parted
           git clone --quiet https://github.com/flynnsbit/dosforge.git "$RUNNER_TEMP/dosforge"
           git -C "$RUNNER_TEMP/dosforge" checkout -q a09a2767c9b7cf35d8fe34ae6903e16a8e5dea64
           python -m pip install -q -e "$RUNNER_TEMP/dosforge"
@@ -157,11 +157,27 @@ jobs:
           mkdir -p ports/dos16/dist/cf16
           zip="$(find "$RUNNER_TEMP/py86-verified" -name 'PY86-UPSTREAM-129-LAB.zip' -print -quit)"
           test -s "$zip"
+          # dosforge supports hard disk VHD, not a 16MB floppy IMG.
+          # A fixed VHD contains raw sectors followed by its 512-byte footer.
+          # 512 cylinders x 2 heads x 32 sectors gives exactly 16MiB.
           python -m dosforge create \
-            --media-type img --format fat16 --size 16M \
+            --media-type vhd --format fat16 --size 16M \
+            --custom-chs 512,2,32 \
             --boot-mode freedos \
             --boot-assets-path "$RUNNER_TEMP/dosforge/dosassets/freedos" \
-            --path "$PWD/ports/dos16/dist/cf16/PY86V129.IMG"
+            --path "$PWD/ports/dos16/dist/cf16/PY86V129.VHD"
+          python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          folder=Path('ports/dos16/dist/cf16')
+          vhd=(folder/'PY86V129.VHD').read_bytes()
+          assert len(vhd)==16777216+512, len(vhd)
+          assert vhd[-512:-504]==b'conectix', 'Missing fixed-VHD footer'
+          raw=vhd[:-512]
+          assert raw[510:512]==b'\\x55\\xaa', 'Missing MBR'
+          (folder/'PY86V129.IMG').write_bytes(raw)
+          print('PASS fixed VHD raw sectors converted into 16MiB CF IMG')
+          PY
           python ports/dos16/embed_upstream_129_cf.py \
             --image ports/dos16/dist/cf16/PY86V129.IMG --archive "$zip"
           test "$(stat -c %s ports/dos16/dist/cf16/PY86V129.IMG)" = 16777216
