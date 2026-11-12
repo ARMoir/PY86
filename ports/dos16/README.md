@@ -153,7 +153,8 @@ included in a release or copied to the normal DOS installation.
 DOSBox process:
 
 - Unmodified bytecode must execute normally.
-- Reserved opcode (0x00) must produce a handled Python opcode exception.
+- Injected reserved opcode (0x00) must fail with a handled Python exception
+  rather than crashing the DOS process.
 - Corrupted long jump goes outside the compiled function's bytecode buffer.
 - Corrupted function bytecode pointer points at segment 0, offset 0.
 
