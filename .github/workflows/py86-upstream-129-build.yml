@@ -52,7 +52,7 @@ jobs:
             --output "$RUNNER_TEMP/ow.tar.xz"
           mkdir -p "$RUNNER_TEMP/ow"
           tar -xJf "$RUNNER_TEMP/ow.tar.xz" -C "$RUNNER_TEMP/ow"
-      # 1.29 defines MP_NORETURN; Open Watcom needs an explicit DOS port override.
+      # 1.29 compiler iteration: C89 label/initializer adaptations plus MP_NORETURN.
       - name: Attempt native Open Watcom C16 8086 build
         shell: bash
         run: |
