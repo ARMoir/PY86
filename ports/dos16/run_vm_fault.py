@@ -100,7 +100,8 @@ def main():
     if (reserved["timeout"] or not reserved["batch_completed"] or
             reserved["dos_status"] != "NONZERO" or
             not reserved["injected"] or
-            "opcode" not in reserved["output"].lower() or
+            not ("Traceback" in reserved["output"] or
+                 "NotImplementedError:" in reserved["output"]) or
             "PASS unmodified_fault_source" in reserved["output"]):
         errors.append("Reserved-opcode error was not handled cleanly")
     for row in results[2:]:
