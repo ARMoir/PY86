@@ -15,6 +15,8 @@ ROOT = Path(__file__).resolve().parent
 p = argparse.ArgumentParser()
 p.add_argument('--source', type=Path, required=True)
 p.add_argument('--watcom', type=Path, required=True)
+p.add_argument('--core-version', choices=('1.24.1','1.29.0'), default='1.24.1',
+               help='Pinned upstream MicroPython core; sets accurate DOS version text')
 p.add_argument('--only', default='')
 p.add_argument('--string-mode', choices=('original', 'char-cache', 'lazy-hash', 'both'),
                default='both', help='String optimization (production default: both)')
@@ -137,6 +139,8 @@ def per_file_flags(c):
             'block512': 1, 'block1024': 2, 'block2048': 3, 'geometric': 4,
         }[args.parser_alloc_mode]))
     if c.name == 'main.c':
+        if args.core_version == '1.29.0':
+            selected.append('-dPY86_UPSTREAM_129=1')
         if args.source_loader == 'direct':
             selected.append('-dPY86_SOURCE_DIRECT=1')
         if args.profile_compile or args.runtime_profile:
