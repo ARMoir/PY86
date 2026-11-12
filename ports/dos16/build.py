@@ -19,6 +19,10 @@ p.add_argument('--only', default='')
 p.add_argument('--string-mode', choices=('original', 'char-cache', 'lazy-hash', 'both'),
                default='both', help='String optimization (production default: both)')
 p.add_argument('--resume', action='store_true')
+p.add_argument('--data-layout',
+               choices=('production', 'far128', 'hotstate', 'medium'),
+               default='production',
+               help='Experimental DOS memory placement; production remains -ml/-zt=256')
 p.add_argument('--file-readline-mode', choices=('generic', 'fast'), default='generic',
                help='DOS file.readline implementation (default: generic; fast is experimental)')
 p.add_argument('--vm-mode', choices=('baseline', 'fast-decode', 'compiler', 'far128', 'near384', 'combined',
@@ -41,7 +45,7 @@ if not re.fullmatch(r'0\.\d{2}\.(?:0[1-9]|1[0-2])\.\d+', version):
     '#ifndef PY86_VERSION\n#define PY86_VERSION "' + version + '"\n#endif\n',
     encoding='ascii')
 (build / 'py86-version.txt').write_text(version + '\n', encoding='ascii')
-print('Py86 version:', version, flush=True)
+print('Py86 version:', version, 'data layout:', args.data_layout, flush=True)
 env = dict(os.environ, WATCOM=str(wat), INCLUDE=str(wat / 'h'))
 toolbin = wat / ('binnt64' if os.name == 'nt' else 'binl64')
 exesuffix = '.exe' if os.name == 'nt' else ''
@@ -72,8 +76,22 @@ vm_configs = {
     'reopt': (256, ['-oh'], 0),
 }
 threshold, vm_optimizations, fast_uint = vm_configs[args.vm_mode]
-flags = ['-q', '-bt=dos', '-0', '-ml', '-za99', '-ot', '-s', '-fpc', '-zp2',
-         '-zt=' + str(threshold), *vm_optimizations,
+# Experimental 8086 memory layouts are fully opt-in.  The default leaves
+# precisely the existing production -ml/-zt=256 compiler behavior in place.
+if args.data_layout != 'production' and args.vm_mode != 'baseline':
+    raise SystemExit('--data-layout experiments require --vm-mode baseline')
+if args.data_layout in ('far128', 'hotstate'):
+    threshold = 128
+if args.data_layout == 'hotstate':
+    header = (src / 'py' / 'mpstate.h').read_text()
+    if 'PY86_HOT_STATE_NEAR' not in header:
+        raise SystemExit('Run memory_model_lab.py patch-source on isolated MicroPython source')
+flags = ['-q', '-bt=dos', '-0',
+         '-mm' if args.data_layout == 'medium' else '-ml',
+         '-za99', '-ot', '-s', '-fpc', '-zp2',
+         '-zt=' + str(threshold),
+         *(['-dPY86_HOT_STATE_NEAR=1'] if args.data_layout == 'hotstate' else []),
+         *vm_optimizations,
          '-dPY86_VM_FAST_UINT=' + str(fast_uint),
          '-dPY86_FAST_READLINE=' + ('1' if args.file_readline_mode == 'fast' else '0'),
          *lookup_flags[args.lookup_mode],
