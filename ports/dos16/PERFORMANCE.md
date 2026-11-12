@@ -274,3 +274,44 @@ The 32 KiB post-allocation native-memory probe is immediately freed; it
 does not guarantee 32 KiB of later free space. Additional EMS/XMS or
 above-64KB GC capacity requires a separately tested split-heap allocator
 and correct segmented pointer/GC root handling, not just a larger malloc.
+
+## Targeted near interpreter state versus medium memory model (November 11, 2026)
+
+[Full isolated 8086 experiment and downloadable build artifacts](https://github.com/ARMoir/micropython/actions/runs/43136893071). This experiment does
+**not** change the production executable, build defaults, or pinned MicroPython
+source. All variants use the 8086-compatible `-0` target. The hybrid applies
+a conditional Open Watcom `__near` declaration to `mp_state_ctx` in a
+*temporary patched upstream checkout* and uses large model (`-ml`) with
+`-zt=128` to free near space, while retaining the separate far GC heap.
+
+| Build | Full DOSBox test suite and 13-workload bench | EXE bytes | GC heap free (48 KB fixed) |
+| --- | --- | ---: | ---: |
+| Production `-ml -zt=256` | PASS | 344,808 | 45,488 |
+| Reduced near threshold `-ml -zt=128` | PASS | 345,160 | 45,488 |
+| Hybrid `-ml -zt=128`, interpreter state `__near` | PASS | 343,720 | 45,488 |
+| Medium memory model `-mm` | **Link failure**: DGROUP 912 bytes beyond 64 KB | N/A | N/A |
+
+**Relative throughput in DOSBox Staging** (three samples per workload,
+approximately 55 ms BIOS timer resolution):
+
+| Workload | Far128 vs production | Hybrid vs production |
+| --- | ---: | ---: |
+| Dictionary lookup | 0% | **+17.0%** |
+| Module attribute lookup | +12.3% | +12.3% |
+| VM load benchmark | -0.2% | **-7.7%** |
+| String concatenation | -10.9% | +0.2% |
+| PythonClock frame rendering | 0% | **0%** |
+| VM branch, call, global and tuple | 0% | 0% |
+
+This is a genuine working hybrid candidate: its Python semantics, memory,
+GC root tests, disk operations, 19-group feature demo and short-screen demo
+pass the full DOSBox suite. But the performance tradeoff is mixed, and there
+is **no measured PythonClock frame improvement** in the emulator. Full medium
+model cannot simply be enabled: it overflows DGROUP before it reaches runtime,
+and moving to near pointers would require redesigning the far GC heap and
+pointer assumptions even if the static-data overflow were resolved.
+
+**Decision:** keep production `-ml -zt=256` unchanged. Try the separate
+hardware A/B package on the 7 MHz Tandy V20 before promoting the hybrid.
+The historical compressed-executable startup regression is unrelated to
+the uncompressed near-state experiment.
