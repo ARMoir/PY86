@@ -52,7 +52,7 @@ jobs:
             --output "$RUNNER_TEMP/ow.tar.xz"
           mkdir -p "$RUNNER_TEMP/ow"
           tar -xJf "$RUNNER_TEMP/ow.tar.xz" -C "$RUNNER_TEMP/ow"
-      # 1.29 compiler iteration: C89 label/initializer adaptations plus MP_NORETURN.
+      # C16 lexer and float retry labels now have six Watcom statement trampolines.
       - name: Attempt native Open Watcom C16 8086 build
         shell: bash
         run: |
