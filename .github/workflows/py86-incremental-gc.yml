@@ -99,7 +99,7 @@ jobs:
             --emulator staging --core-version 1.29.0 --timeout 300
           python ports/dos16/run_bench.py --dosbox "$DOSBOX_STAGING" \
             --emulator staging --mode incremental-baseline \
-            --heap 48000 --timeout 300
+            --heap 48000 --gc-tests --timeout 300
           python ports/dos16/run_compile_lab.py --dosbox "$DOSBOX_STAGING" \
             --emulator staging --mode incremental-baseline \
             --runtime-stress --timeout 360
@@ -131,7 +131,7 @@ jobs:
             --emulator staging --core-version 1.29.0 --timeout 300
           python ports/dos16/run_bench.py --dosbox "$DOSBOX_STAGING" \
             --emulator staging --mode incremental-data \
-            --heap 48000 --timeout 300
+            --heap 48000 --gc-tests --timeout 300
           python ports/dos16/run_compile_lab.py --dosbox "$DOSBOX_STAGING" \
             --emulator staging --mode incremental-data \
             --runtime-stress --timeout 360
@@ -171,7 +171,7 @@ jobs:
             --emulator staging --core-version 1.29.0 --timeout 300
           python ports/dos16/run_bench.py --dosbox "$DOSBOX_STAGING" \
             --emulator staging --mode incremental-candidate \
-            --heap 48000 --timeout 300
+            --heap 48000 --gc-tests --timeout 300
           python ports/dos16/run_compile_lab.py --dosbox "$DOSBOX_STAGING" \
             --emulator staging --mode incremental-candidate \
             --runtime-stress --timeout 360
