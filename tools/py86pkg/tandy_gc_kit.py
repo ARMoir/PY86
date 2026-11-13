@@ -60,7 +60,15 @@ def package():
             raise RuntimeError("DOS 8.3 violation: " + name)
         if not source.is_file():
             raise RuntimeError("Missing kit source: " + str(source))
-        shutil.copy2(source, KIT / name)
+        if name.endswith(".BAT"):
+            # COMMAND.COM on real MS-DOS 6.22 requires DOS CRLF records.
+            raw = source.read_bytes().replace(b"\r\n", b"\n")
+            (KIT / name).write_bytes(raw.replace(b"\n", b"\r\n"))
+        elif name.endswith(".TXT"):
+            raw = source.read_bytes().replace(b"\r\n", b"\n")
+            (KIT / name).write_bytes(raw.replace(b"\n", b"\r\n"))
+        else:
+            shutil.copy2(source, KIT / name)
     (KIT / "BUILD.JSN").write_text(json.dumps(info, indent=2) + "\n")
     (KIT / "SHA256.TXT").write_text("\r\n".join(
         item["sha256"] + "  " + name
