@@ -41,6 +41,7 @@ for f in (root / 'tests/pythonclock').glob('*.py'):
 generate_clock(stage / 'CLOCK.PY')
 shutil.copy2(root / 'examples' / 'DEMO.PY', stage / 'DEMO.PY')
 shutil.copy2(root / 'examples' / 'SHOW.PY', stage / 'SHOW.PY')
+shutil.copy2(root / 'examples' / 'SNAKE.PY', stage / 'SNAKE.PY')
 (stage / 'ONECLK.PY').write_text(
     "import clock\n"
     "f = clock.render(12, 0, 0)\n"
@@ -110,7 +111,9 @@ with (root / 'build/emulator.log').open('w') as log:
                    stdout=log, stderr=log, **runner_opts)
 result = (stage / 'RESULT.TXT').read_text().strip() if (stage / 'RESULT.TXT').exists() else 'NO RESULT'
 logs = {f.name: f.read_text(errors='replace') for f in stage.glob('*.OUT')}
-required = {'SMOKE.OUT': ['PASS smoke'], 'METHOD.OUT': ['PASS methods'],
+required = {'CURSES.OUT': ['PASS curses_screen'],
+            'SNAKE.OUT': ['PASS snake_logic'],
+            'SMOKE.OUT': ['PASS smoke'], 'METHOD.OUT': ['PASS methods'],
             'CORE.OUT': ['PASS numeric', 'PASS unicode', 'PASS control', 'PASS functions',
                          'PASS exceptions', 'PASS containers', 'PASS classes_generators',
                          'PASS imports', 'PASS core_complete'],

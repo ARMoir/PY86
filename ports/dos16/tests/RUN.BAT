@@ -3,6 +3,10 @@ py86 SMOKE.PY > SMOKE.OUT
 if errorlevel 1 goto fail
 py86 METHOD.PY > METHOD.OUT
 if errorlevel 1 goto fail
+py86 CURSES.PY > CURSES.OUT
+if errorlevel 1 goto fail
+py86 SNAKE.PY --selftest > SNAKE.OUT
+if errorlevel 1 goto fail
 py86 CORE.PY > CORE.OUT
 if errorlevel 1 goto fail
 py86 GC.PY > GC.OUT

@@ -11,6 +11,28 @@ physical Tandy 1000 EX hardware, but the newly expanded modules have not yet
 been tested there. Older archived DOSBox tests reported `PASS`; these were
 not a fresh emulator test of the expanded module build.
 
+## Native DOS curses and Snake
+
+The `main` build includes an 8086/V20-compatible, text-mode-only `curses` subset:
+`initscr()`, `endwin()`, `curs_set()`, `getmaxyx()`, `clear()`, `erase()`,
+`move()`, `addch()`, `addstr()`, `refresh()`, `getch()`, `nodelay()`,
+`timeout()`, `keypad()` and arrow-key constants. It uses BIOS INT 10h and
+INT 16h, with native screen and dirty-cell buffers allocated only when
+`initscr()` is called. No ANSI.SYS, VGA, ncurses, or extra Python package is
+required. Timed input is BIOS-tick limited (about 55 ms resolution), and
+only conventional 40/80-column, 25-row DOS text modes are supported.
+
+Run `RUNSNAKE` from the release ZIP, or `PY86 SNAKE.PY`. Use the arrow keys
+or WASD to steer, P to pause, and Q/Esc to quit. The game deliberately uses
+simple ASCII cells and incremental redraws for slow V20 hardware.
+`PY86 SNAKE.PY --selftest` checks deterministic game rules without using
+interactive keyboard input. The DOSBox test suite exercises the native
+curses API and Snake logic before publishing a release.
+
+This is deliberately **not a full CPython curses implementation**: it has
+one screen window, fixed text attributes, and no color-pair or panel support.
+Call `curses.endwin()` in a `finally` block to restore the DOS cursor.
+
 ## Release pipeline (main branch, November 2026)
 
 The production release builds **MicroPython 1.29.0 + 1KA + batched GC root

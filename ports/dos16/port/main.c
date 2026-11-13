@@ -147,7 +147,7 @@ static int py86_heap_allocate(void) {
 const char py86_help_text[] =
     "Py86: Python 3 for 16-bit DOS (MicroPython " PY86_MP_VERSION ")\n"
     "Commands: help(), help(obj), exit(), quit(), input(), print()\n"
-    "Modules: os, sys, time, datetime, math, random, json, re, hashlib, gc, errno\n"
+    "Modules: os, sys, time, datetime, math, random, json, re, hashlib, curses, gc, errno\n"
     "Run: PY86 SCRIPT.PY or PY86 for the interactive prompt.\n"
     "Ctrl+C interrupts Python; Ctrl+Z exits the console REPL.\n"
     "For built-in object information, use help(obj).\n"
