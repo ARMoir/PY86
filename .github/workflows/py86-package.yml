@@ -1,4 +1,4 @@
-name: Py86 1.29.0 1KA GC master release (single retained release)
+name: Py86 1.29.0 1KA data-aware GC master release (single retained release)
 
 on:
   push:
@@ -15,7 +15,7 @@ concurrency:
 jobs:
   package:
     if: github.ref == 'refs/heads/master'
-    name: Build, validate, release 1.29.0/1KA-GC and purge older releases
+    name: Build, validate, release 1.29.0/1KA data-aware GC and purge older releases
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     steps:
@@ -44,6 +44,8 @@ jobs:
             ports/dos16/rebase_core_129.py \
             ports/dos16/parser_allocator_lab.py \
             ports/dos16/prepare_release_gc129.py \
+            ports/dos16/prepare_data_gc129.py \
+            ports/dos16/run_data_gc_release.py \
             ports/dos16/prepare_repl_autocomplete_129.py \
             tools/py86pkg/gc129_lab.py \
             ports/dos16/package.py \
@@ -72,7 +74,7 @@ jobs:
           test -x "$RUNNER_TEMP/watcom/binl64/wcc"
           test -x "$RUNNER_TEMP/watcom/binl64/wlink"
 
-      - name: Apply 1.29.0 DOS patches, 1KB parser and validated GC batching
+      - name: Apply 1.29.0 DOS patches, 1KB parser and validated data-aware GC
         shell: bash
         run: |
           set -euo pipefail
@@ -84,8 +86,12 @@ jobs:
             --source "$RUNNER_TEMP/micropython-1.29.0"
           python ports/dos16/prepare_repl_autocomplete_129.py \
             --source "$RUNNER_TEMP/micropython-1.29.0"
+          # Same exact scan-skip patch verified in DOSBox and on a real Tandy.
+          python ports/dos16/prepare_data_gc129.py \
+            --source "$RUNNER_TEMP/micropython-1.29.0"
+          test -s "$RUNNER_TEMP/micropython-1.29.0/py86-data-gc.json"
 
-      - name: Build qualified MicroPython 1.29.0 1KA + GC for 8086/V20
+      - name: Build qualified MicroPython 1.29.0 1KA + data-aware GC for 8086/V20
         shell: bash
         run: |
           set -euo pipefail
@@ -100,6 +106,7 @@ jobs:
             --vm-fault-probe
           test -s ports/dos16/build/py86.exe
           grep -q PY86_GC129_APPLIED ports/dos16/build/release-gc-source.txt
+          grep -q '"collector": "production data-aware GC' "$RUNNER_TEMP/micropython-1.29.0/py86-data-gc.json"
 
       # Use the same pinned portable DOSBox Staging binary that succeeded for
       # py86pkg Roman tests; avoid intermittent Ubuntu apt mirror DNS failures.
@@ -137,6 +144,29 @@ jobs:
           print('PASS release version and DOSBox tests:', data['version'])
           PY
 
+      - name: Gate release on data-aware GC mutation and realloc safety at 24/32/48 KB
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          set -euo pipefail
+          python ports/dos16/run_data_gc_release.py \
+            --dosbox "$DOSBOX_STAGING" --timeout 360
+
+      - name: Upload release GC qualification evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: PY86-data-aware-GC-qualification
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            ports/dos16/build/release-data-gc-tests/result.json
+            ports/dos16/build/release-data-gc-tests/H*/*.OUT
+            ports/dos16/build/release-data-gc-tests/H*/HEAP.OUT
+            ports/dos16/build/release-data-gc-tests/H*/RESULT.TXT
+            ports/dos16/build/release-gc-source.txt
+
       - name: Characterize corrupted VM bytecode in isolated DOSBox processes
         shell: bash
         env:
@@ -166,7 +196,7 @@ jobs:
         run: |
           python ports/dos16/run_bench.py \
             --dosbox "$DOSBOX_STAGING" --emulator staging \
-            --mode production-strings --timeout 240
+            --mode production-strings --heap 48000 --gc-tests --timeout 300
 
       - name: Upload production performance measurements
         uses: actions/upload-artifact@v4
@@ -197,7 +227,7 @@ jobs:
             ports/dos16/dos-test/ONECLK.OUT
             ports/dos16/dos-test/PY86.LOG
 
-      - name: Package optimized 1.29.0 1KA-GC release, PythonClock and feature demo
+      - name: Package optimized 1.29.0 1KA data-aware GC release, PythonClock and feature demo
         shell: bash
         run: |
           python ports/dos16/package.py
@@ -249,7 +279,9 @@ jobs:
           - Built from commit \`${GITHUB_SHA}\` on branch \`${GITHUB_REF_NAME}\`.
           - Source: MicroPython **1.29.0** (pinned SHA 0fd6c573ea815774668bbb16b8e197c8822368b2) with Py86 8086 DOS compatibility patches.
           - **1KA**: 1 KB parse-tree arena plus compiler-only Open Watcom flags.
+          - **Data-aware GC (default)**: avoids scanning non-pointer bytearrays and raw string buffers using a bounded 512-byte bitmap, with safe fallback.
           - **GC root batching**: tested 2-byte overlapping pointer-window traversal, preserving conservative 16-bit far-pointer roots.
+          - Data-aware GC has passed DOSBox 24/32/48KB stress checks and physical Tandy 1000 EX A/B testing; no incremental tri-color GC or bytecode loader is included.
           - Near-data layout: far128; GC instrumentation available with PY86_PROFILE=1.
           - Includes standard uncompressed PY86.EXE, generated CLOCK.PY, DEMO.PY and one-screen SHOW.PY.
           - RUNSHOW displays 8 live feature examples within 80x25 DOS screen limits.

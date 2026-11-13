@@ -3,7 +3,7 @@
 **Py86** is an experimental Python 3 interpreter for 16-bit MS-DOS, based on
 **MicroPython 1.29.0** for releases from `master`. It targets Intel 8086/8088-class CPUs and compatibles,
 including NEC V20 machines such as the Tandy 1000 EX.
-Development and validated GC batching now live on `master`; historical 1.24.1 work is retained for reference.
+Production now includes **data-aware GC** together with the qualified 1KA parser and batched conservative GC roots. Historical 1.24.1 work is retained for reference.
 
 **Status:** experimental 16-bit Open Watcom build. GitHub Actions now
 rebuilds and packages Py86 successfully. The original PythonClock has run on
@@ -35,12 +35,26 @@ Call `curses.endwin()` in a `finally` block to restore the DOS cursor.
 
 ## Release pipeline (master branch, November 2026)
 
-The production release builds **MicroPython 1.29.0 + 1KA + batched GC root
-scanning**. The pinned source is adapted by `prepare_source_129.py`, the 1 KB
-parser by `parser_allocator_lab.py`, GC root batching by
-`prepare_release_gc129.py`, and Python builtin-name completion by
-`prepare_repl_autocomplete_129.py`. The complete native DOSBox suite and VM-fault
-tests must pass before the release ZIP is uploaded.
+The production release builds **MicroPython 1.29.0 + 1KA + data-aware GC + batched GC roots**. The pinned source is adapted by `prepare_source_129.py`,
+the 1 KB parser by `parser_allocator_lab.py`, GC root batching by
+`prepare_release_gc129.py`, data-aware scan-skipping by
+`prepare_data_gc129.py`, and Python builtin-name completion by
+`prepare_repl_autocomplete_129.py`. The complete native DOSBox suite,
+VM-fault tests, and 24 KB/32 KB/48 KB data-aware GC stress tests must
+pass before a release ZIP is published.
+
+The **data-aware GC** retains the normal conservative two-bit allocation table
+and two-byte overlapping 16-bit far-pointer root scanning. It uses a bounded
+512-byte side bitmap to tag only pointer-free raw string and bytearray buffers,
+and safely falls back to conservative scanning when tagging is unsupported.
+Reallocations preserve raw-buffer tags. It is **not** incremental GC and adds no
+write barriers or precompiled bytecode loader.
+
+On the real 7 MHz Tandy 1000 EX, the 48 KB A/B test found raw-buffer GC
+15.60s → 4.83s and reference-heavy GC 37.95s → 16.75s, while gameplay
+felt faster and Snake startup remained approximately 34 seconds.
+DOSBox stress tests passed at 24 KB, 32 KB and 48 KB; physical validation
+at these smaller heaps and on other 8086 systems is still pending.
 
 Releases are created **only from `master`**. When a new release is published
 and its downloadable ZIP is verified, GitHub Actions deletes all other GitHub
