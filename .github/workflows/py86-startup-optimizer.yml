@@ -1,0 +1,96 @@
+name: Py86 DOS16 source loader startup comparison (experiment only)
+
+on:
+  push:
+    branches: [experiment/incremental-gc-bench]
+    paths:
+      - '.github/workflows/py86-startup-optimizer.yml'
+      - 'tools/py86pkg/startup_optimizer_lab.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  startup:
+    if: github.ref == 'refs/heads/experiment/incremental-gc-bench'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    env:
+      PY86_VERSION: 0.26.11.0
+      SDL_VIDEODRIVER: dummy
+      SDL_AUDIODRIVER: dummy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate startup instrumentation
+        run: python -m py_compile tools/py86pkg/startup_optimizer_lab.py
+      - name: Fetch pinned MicroPython core and Open Watcom / DOSBox
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet --depth 1 --branch v1.29.0 \
+            https://github.com/micropython/micropython.git "$RUNNER_TEMP/mp129"
+          test "$(git -C "$RUNNER_TEMP/mp129" rev-parse HEAD)" = 0fd6c573ea815774668bbb16b8e197c8822368b2
+          curl --fail --location --retry 3 --retry-delay 5 \
+            'https://github.com/open-watcom/open-watcom-v2/releases/download/2026-11-01-Build/ow-snapshot.tar.xz' \
+            --output "$RUNNER_TEMP/ow.tar.xz"
+          mkdir -p "$RUNNER_TEMP/ow"
+          tar -xJf "$RUNNER_TEMP/ow.tar.xz" -C "$RUNNER_TEMP/ow"
+          curl --fail --location --retry 3 --retry-delay 5 \
+            'https://github.com/dosbox-staging/dosbox-staging/releases/download/v0.83.0/dosbox-staging-linux-x86_64-v0.83.0.tar.xz' \
+            --output "$RUNNER_TEMP/db.tar.xz"
+          echo 'd3a94f7f1c3e68a47ec88d61145506c7904452adb0c9c5928cb8cfe2331d6c5c  '"$RUNNER_TEMP/db.tar.xz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/db"
+          tar -xJf "$RUNNER_TEMP/db.tar.xz" -C "$RUNNER_TEMP/db"
+          exe="$(find "$RUNNER_TEMP/db" -type f -name dosbox -print -quit)"
+          chmod +x "$exe"
+          echo "DOSBOX=$exe" >> "$GITHUB_ENV"
+
+      - name: Apply pinned Py86 core and validated data-aware GC
+        shell: bash
+        run: |
+          set -euo pipefail
+          python ports/dos16/prepare_source_129.py --source "$RUNNER_TEMP/mp129" --report-dir ports/dos16/build/startup-source
+          python ports/dos16/parser_allocator_lab.py patch-source "$RUNNER_TEMP/mp129"
+          python ports/dos16/prepare_release_gc129.py --source "$RUNNER_TEMP/mp129"
+          python ports/dos16/prepare_repl_autocomplete_129.py --source "$RUNNER_TEMP/mp129"
+          python ports/dos16/prepare_data_gc_lab.py --source "$RUNNER_TEMP/mp129"
+
+      - name: Compile existing two-copy loader with all production flags
+        shell: bash
+        run: |
+          set -euo pipefail
+          python ports/dos16/build.py --source "$RUNNER_TEMP/mp129" \
+            --watcom "$RUNNER_TEMP/ow" --core-version 1.29.0 \
+            --parser-alloc-mode block1024 --compile-opt all \
+            --data-layout far128 --runtime-profile --source-loader original
+          python tools/py86pkg/startup_optimizer_lab.py capture --label regular
+
+      - name: Compile existing direct-to-GC lexer loader
+        shell: bash
+        run: |
+          set -euo pipefail
+          python ports/dos16/build.py --source "$RUNNER_TEMP/mp129" \
+            --watcom "$RUNNER_TEMP/ow" --core-version 1.29.0 \
+            --parser-alloc-mode block1024 --compile-opt all \
+            --data-layout far128 --runtime-profile --source-loader direct
+          python tools/py86pkg/startup_optimizer_lab.py capture --label direct
+
+      - name: Compare 3 independent DOSBox launches and Python startup phases
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/py86pkg/startup_optimizer_lab.py compare --dosbox "$DOSBOX"
+      - name: Retain executable and source-load evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PY86-startup-source-loader-A-B
+          retention-days: 30
+          path: |
+            ports/dos16/build/startup-lab/**
+            ports/dos16/build/startup-source/**
+            ports/dos16/build/*.log
