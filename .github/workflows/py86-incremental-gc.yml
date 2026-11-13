@@ -1,0 +1,168 @@
+name: Py86 experimental incremental GC A/B - no releases
+
+on:
+  push:
+    branches: [experiment/incremental-gc-bench]
+    paths:
+      - '.github/workflows/py86-incremental-gc.yml'
+      - 'tools/py86pkg/incremental_gc_lab.py'
+      - 'ports/dos16/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: py86-experimental-incremental-gc
+  cancel-in-progress: true
+
+jobs:
+  experimental-gc:
+    if: github.ref == 'refs/heads/experiment/incremental-gc-bench'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 95
+    env:
+      PY86_VERSION: 0.26.11.0
+      SDL_VIDEODRIVER: dummy
+      SDL_AUDIODRIVER: dummy
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Validate experiment scripts
+        run: |
+          python -m py_compile tools/py86pkg/incremental_gc_lab.py ports/dos16/build.py ports/dos16/run_dos.py ports/dos16/run_bench.py
+
+      - name: Clone pinned MicroPython 1.29 and pinned GC fork
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet --depth 1 --branch v1.29.0 \
+            https://github.com/micropython/micropython.git "$RUNNER_TEMP/mp129"
+          test "$(git -C "$RUNNER_TEMP/mp129" rev-parse HEAD)" = '0fd6c573ea815774668bbb16b8e197c8822368b2'
+          git clone --quiet --depth 1 --branch gc-incremental \
+            https://github.com/raspy135/micropython.git "$RUNNER_TEMP/incremental-fork"
+          git -C "$RUNNER_TEMP/incremental-fork" fetch --quiet --depth 1 origin \
+            master:refs/remotes/origin/master
+          test "$(git -C "$RUNNER_TEMP/incremental-fork" rev-parse HEAD)" = '6b9ed5871b52fd68debe5866af9a41333b828e73'
+          test "$(git -C "$RUNNER_TEMP/incremental-fork" rev-parse origin/master)" = '970468103d5ce776d092a1eb84e3bdf2ab5a3b0b'
+
+      - name: Install pinned Open Watcom and DOSBox Staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-delay 5 \
+            'https://github.com/open-watcom/open-watcom-v2/releases/download/2026-11-01-Build/ow-snapshot.tar.xz' \
+            --output "$RUNNER_TEMP/ow-snapshot.tar.xz"
+          mkdir -p "$RUNNER_TEMP/watcom"
+          tar -xJf "$RUNNER_TEMP/ow-snapshot.tar.xz" -C "$RUNNER_TEMP/watcom"
+          test -x "$RUNNER_TEMP/watcom/binl64/wcc"
+          curl --fail --location --retry 3 --retry-delay 5 \
+            'https://github.com/dosbox-staging/dosbox-staging/releases/download/v0.83.0/dosbox-staging-linux-x86_64-v0.83.0.tar.xz' \
+            --output "$RUNNER_TEMP/dosbox-staging.tar.xz"
+          echo 'd3a94f7f1c3e68a47ec88d61145506c7904452adb0c9c5928cb8cfe2331d6c5c  '"$RUNNER_TEMP/dosbox-staging.tar.xz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/dosbox-staging"
+          tar -xJf "$RUNNER_TEMP/dosbox-staging.tar.xz" -C "$RUNNER_TEMP/dosbox-staging"
+          exe="$(find "$RUNNER_TEMP/dosbox-staging" -type f -name dosbox -print -quit)"
+          test -n "$exe"
+          chmod +x "$exe"
+          echo "DOSBOX_STAGING=$exe" >> "$GITHUB_ENV"
+
+      - name: Apply exact production Py86 1.29 core and GC patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          python ports/dos16/prepare_source_129.py \
+            --source "$RUNNER_TEMP/mp129" --report-dir ports/dos16/build/incgc-source
+          python ports/dos16/parser_allocator_lab.py patch-source "$RUNNER_TEMP/mp129"
+          python ports/dos16/prepare_release_gc129.py --source "$RUNNER_TEMP/mp129"
+          python ports/dos16/prepare_repl_autocomplete_129.py --source "$RUNNER_TEMP/mp129"
+          cp -a "$RUNNER_TEMP/mp129" "$RUNNER_TEMP/mp129-candidate"
+
+      - name: Compile production-configured baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python ports/dos16/build.py --source "$RUNNER_TEMP/mp129" \
+            --watcom "$RUNNER_TEMP/watcom" --core-version 1.29.0 \
+            --parser-alloc-mode block1024 --compile-opt all \
+            --data-layout far128 --runtime-profile
+
+      - name: Verify and benchmark baseline in real-mode DOSBox
+        shell: bash
+        run: |
+          set -euo pipefail
+          python ports/dos16/run_dos.py --dosbox "$DOSBOX_STAGING" \
+            --emulator staging --core-version 1.29.0 --timeout 300
+          python ports/dos16/run_bench.py --dosbox "$DOSBOX_STAGING" \
+            --emulator staging --mode incremental-baseline \
+            --heap 48000 --timeout 300
+          python ports/dos16/run_compile_lab.py --dosbox "$DOSBOX_STAGING" \
+            --emulator staging --mode incremental-baseline \
+            --runtime-stress --timeout 360
+          python tools/py86pkg/incremental_gc_lab.py snapshot --label baseline
+
+      - name: Check full upstream GC changes against patched DOS16 core
+        id: compatible
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/py86pkg/incremental_gc_lab.py prepare \
+            --source "$RUNNER_TEMP/mp129-candidate" \
+            --fork "$RUNNER_TEMP/incremental-fork"
+          if python -c "import json; from pathlib import Path; assert json.loads(Path('ports/dos16/build/incremental-gc/compatibility.json').read_text())['patch_applicable']"; then
+            echo "candidate=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "candidate=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Fork source needs DOS16 rebase. See patch rejection report. No candidate performance claim."
+          fi
+
+      - name: Compile candidate only if all source hunks apply
+        if: steps.compatible.outputs.candidate == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python ports/dos16/build.py --source "$RUNNER_TEMP/mp129-candidate" \
+            --watcom "$RUNNER_TEMP/watcom" --core-version 1.29.0 \
+            --parser-alloc-mode block1024 --compile-opt all \
+            --data-layout far128 --runtime-profile
+
+      - name: Same tests and benchmarks for candidate, only if compiled
+        if: steps.compatible.outputs.candidate == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python ports/dos16/run_dos.py --dosbox "$DOSBOX_STAGING" \
+            --emulator staging --core-version 1.29.0 --timeout 300
+          python ports/dos16/run_bench.py --dosbox "$DOSBOX_STAGING" \
+            --emulator staging --mode incremental-candidate \
+            --heap 48000 --timeout 300
+          python ports/dos16/run_compile_lab.py --dosbox "$DOSBOX_STAGING" \
+            --emulator staging --mode incremental-candidate \
+            --runtime-stress --timeout 360
+          python tools/py86pkg/incremental_gc_lab.py snapshot --label candidate
+
+      - name: Summarize verified evidence, never fabricate missing candidate data
+        if: always()
+        run: python tools/py86pkg/incremental_gc_lab.py summary
+
+      - name: Upload source rejects, GC data, reports, and DOS executables
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PY86-incremental-GC-experiment
+          retention-days: 30
+          if-no-files-found: warn
+          path: |
+            ports/dos16/build/incremental-gc/**
+            ports/dos16/build/incgc-source/**
+            ports/dos16/build/release-gc-source.txt
+            ports/dos16/build/*.log
+            ports/dos16/build/test-results.json
+            ports/dos16/build/benchmark-incremental-*.json
+            ports/dos16/build/compile-profile-incremental-*.json
+            ports/dos16/dos-test/*.OUT
+            ports/dos16/dos-test/RESULT.TXT
