@@ -135,10 +135,10 @@ missing = [f + ': ' + token for f, tokens in required.items() for token in token
 # Ensure CPython-style REPL banner is exact, including blank lines,
 # while retaining the release's dynamically stamped Py86 version.
 expected_banner = ('Py86 ' + version + ' (MicroPython ' + a.core_version + ')\n'
-                   '\nPython 3 for 16-bit DOS\n'
-                   '\nType "help()" for help, "exit()" to quit.\n')
+                   'Python 3 for 16-bit DOS\n'
+                   'Type "help()" for help, "exit()" to quit.\n')
 if expected_banner not in logs.get('REPL.OUT', '').replace('\r\n', '\n'):
-    missing.append('REPL.OUT: incorrect banner or missing blank lines')
+    missing.append('REPL.OUT: incorrect banner or unexpected blank lines')
 # The measurement must be produced by DOS PY86, with exactly one well-formed result.
 count_lines = [line for line in logs.get('COUNT16.OUT', '').splitlines()
                if line.startswith('COUNT16 iterations=')]
