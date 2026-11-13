@@ -69,7 +69,7 @@ if a.repl_tab_test:
         b"print('PASS tab_import')\r\n"
         b"text = 'hello'\r\n"
         b"print(text.up\t())\r\n"
-        b"prit\x00Kn('PASS tab_cursor')\r\n"
+        b"prit\x00Kn\x00O('PASS tab_cursor')\r\n"
         b"printf\x08('PASS tab_backspace')\r\n"
         b"text.st\t\x03"
         b"print('PASS tab_recovery')\r\n"

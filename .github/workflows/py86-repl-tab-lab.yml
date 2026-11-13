@@ -31,6 +31,7 @@ jobs:
             --report-dir ports/dos16/build/repl-tab-lab
           python ports/dos16/parser_allocator_lab.py patch-source "$RUNNER_TEMP/mp129"
           python ports/dos16/prepare_release_gc129.py --source "$RUNNER_TEMP/mp129"
+          python ports/dos16/prepare_repl_autocomplete_129.py --source "$RUNNER_TEMP/mp129"
       - name: Install exact Open Watcom C16 snapshot
         shell: bash
         run: |
