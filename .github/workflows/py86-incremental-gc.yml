@@ -34,7 +34,7 @@ jobs:
 
       - name: Validate experiment scripts
         run: |
-          python -m py_compile tools/py86pkg/incremental_gc_lab.py ports/dos16/build.py ports/dos16/run_dos.py ports/dos16/run_bench.py ports/dos16/prepare_data_gc_lab.py ports/dos16/prepare_fork_gc_candidate.py tools/py86pkg/tandy_gc_kit.py
+          python -m py_compile tools/py86pkg/incremental_gc_lab.py ports/dos16/build.py ports/dos16/run_dos.py ports/dos16/run_bench.py ports/dos16/prepare_data_gc_lab.py ports/dos16/prepare_fork_gc_candidate.py tools/py86pkg/tandy_gc_kit.py tools/py86pkg/gc_extended_startup.py
 
       - name: Clone pinned MicroPython 1.29 and pinned GC fork
         shell: bash
@@ -158,6 +158,13 @@ jobs:
           if-no-files-found: error
           path: ports/dos16/build/incremental-gc/TANDYGC.zip
 
+      - name: Extended GC graph/realloc validation and Snake startup profiles at 24/32/48KB
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/py86pkg/gc_extended_startup.py \
+            --dosbox "$DOSBOX_STAGING" --timeout 360
+
       - name: Check full upstream GC changes against patched DOS16 core
         id: compatible
         shell: bash
@@ -265,6 +272,7 @@ jobs:
           if-no-files-found: warn
           path: |
             ports/dos16/build/incremental-gc/**
+            ports/dos16/build/gc-extended/**
             ports/dos16/build/incgc-source/**
             ports/dos16/build/release-gc-source.txt
             ports/dos16/build/*.log
