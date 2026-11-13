@@ -20,6 +20,8 @@ INPUTS = {
     "CLOCK.PY": ROOT / "build" / "CLOCK.PY",
     "DEMO.PY": ROOT / "examples" / "DEMO.PY",
     "SHOW.PY": ROOT / "examples" / "SHOW.PY",
+    "SNAKE.PY": ROOT / "examples" / "SNAKE.PY",
+    "COUNT16.PY": ROOT / "tests" / "COUNT16.PY",
 }
 
 VERSION = (ROOT / "build" / "py86-version.txt").read_text(encoding="ascii").strip()
@@ -33,6 +35,8 @@ README = (
     "RUNCLK       Optimized single-file analog clock (CLOCK.PY)\r\n"
     "RUNTEST      Run the comprehensive feature checks (DEMO.PY)\r\n"
     "RUNSHOW      Compact one-screen live Python showcase (SHOW.PY)\r\n"
+    "RUNSNAKE     DOS-native text Snake (SNAKE.PY); arrows/WASD/Q\r\n"
+    "RUNCOUNT     Count -32768 to 32767; display elapsed BIOS ms\r\n"
     "RUNLOAD      Optional timing test via START86 launcher\r\n"
     "START86 PY86 DEMO.PY   Optional full child EXE-load timing\r\n"
     "PY86         Start the interactive interpreter\r\n"
@@ -51,12 +55,14 @@ README = (
     "\r\n"
     "On slow machines, tests may take some time.\r\n"
     "Requires DOS-compatible conventional memory and an 8086/V20 CPU.\r\n"
-    "Experimental MicroPython 1.24.1 DOS port; not full CPython.\r\n"
+    "MicroPython 1.29.0 / 1KB optimized parser / batched GC roots; not CPython.\r\n"
 )
 RUNCLK = "@echo off\r\ncls\r\nPY86 --home-cls CLOCK.PY\r\n"
 RUNSHOW = "@echo off\r\ncls\r\nPY86 SHOW.PY\r\n"
 RUNTEST = "@echo off\r\ncls\r\nPY86 DEMO.PY\r\nif errorlevel 1 echo Demo failed; inspect PY86.LOG\r\n"
 RUNLOAD = "@echo off\r\ncls\r\nSTART86 PY86 DEMO.PY\r\nif errorlevel 1 echo Demo failed; inspect PY86.LOG\r\n"
+RUNCOUNT = "@echo off\r\ncls\r\nPY86 COUNT16.PY\r\n"
+RUNSNAKE = "@echo off\r\ncls\r\nPY86 SNAKE.PY\r\n"
 
 
 def main():
@@ -75,6 +81,8 @@ def main():
     (STAGE / "RUNSHOW.BAT").write_bytes(RUNSHOW.encode("ascii"))
     (STAGE / "RUNTEST.BAT").write_bytes(RUNTEST.encode("ascii"))
     (STAGE / "RUNLOAD.BAT").write_bytes(RUNLOAD.encode("ascii"))
+    (STAGE / "RUNCOUNT.BAT").write_bytes(RUNCOUNT.encode("ascii"))
+    (STAGE / "RUNSNAKE.BAT").write_bytes(RUNSNAKE.encode("ascii"))
     (STAGE / "README.TXT").write_bytes(README.encode("ascii"))
     if ARCHIVE.exists():
         ARCHIVE.unlink()
@@ -82,7 +90,7 @@ def main():
         for file in sorted(STAGE.iterdir()):
             z.write(file, file.name)
     with ZipFile(ARCHIVE) as z:
-        expected = set(INPUTS) | {"RUNCLK.BAT", "RUNSHOW.BAT", "RUNTEST.BAT", "RUNLOAD.BAT",
+        expected = set(INPUTS) | {"RUNCLK.BAT", "RUNSHOW.BAT", "RUNTEST.BAT", "RUNLOAD.BAT", "RUNCOUNT.BAT", "RUNSNAKE.BAT",
                                   "README.TXT"}
         if set(z.namelist()) != expected or z.testzip() is not None:
             raise SystemExit("PY86.zip contents failed verification")

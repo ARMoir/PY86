@@ -1,0 +1,137 @@
+name: Py86 Python source compilation speed lab
+
+# Experimental source compilation benchmarks; does not publish releases.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  study:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Prepare pinned MicroPython and DOS patches
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet --depth 1 --branch v1.24.1 \
+            https://github.com/micropython/micropython.git "$RUNNER_TEMP/mp124"
+          test "$(git -C "$RUNNER_TEMP/mp124" rev-parse HEAD)" = \
+            'ecfdd5d6f9be971852003c2049600dc7b3e2a838'
+          python ports/dos16/prepare_source.py --source "$RUNNER_TEMP/mp124"
+      - name: Install pinned Open Watcom 8086 C compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-delay 5 \
+            'https://github.com/open-watcom/open-watcom-v2/releases/download/2026-11-01-Build/ow-snapshot.tar.xz' \
+            --output "$RUNNER_TEMP/ow.tar.xz"
+          mkdir -p "$RUNNER_TEMP/ow"
+          tar -xJf "$RUNNER_TEMP/ow.tar.xz" -C "$RUNNER_TEMP/ow"
+          test -x "$RUNNER_TEMP/ow/binl64/wcc"
+      - name: Install pinned DOSBox Staging 0.83.0
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-delay 5 \
+            'https://github.com/dosbox-staging/dosbox-staging/releases/download/v0.83.0/dosbox-staging-linux-x86_64-v0.83.0.tar.xz' \
+            --output "$RUNNER_TEMP/dosbox.tar.xz"
+          echo 'd3a94f7f1c3e68a47ec88d61145506c7904452adb0c9c5928cb8cfe2331d6c5c  '"$RUNNER_TEMP/dosbox.tar.xz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/dosbox"
+          tar -xJf "$RUNNER_TEMP/dosbox.tar.xz" -C "$RUNNER_TEMP/dosbox"
+          exe="$(find "$RUNNER_TEMP/dosbox" -type f -name dosbox -print -quit)"
+          test -x "$exe"
+          echo "DOSBOX_STAGING=$exe" >> "$GITHUB_ENV"
+      - name: Compile, full regression, and native timing on every candidate
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          set -euo pipefail
+          python -m py_compile ports/dos16/build.py ports/dos16/run_compile_lab.py \
+            ports/dos16/compare_compile_lab.py ports/dos16/run_dos.py
+          mkdir -p ports/dos16/build/compile-lab
+          for mode in baseline chunk32 chunk64 chunk128 loop intrinsic all direct; do
+            echo "::group::Source compilation $mode"
+            case "$mode" in
+              chunk32) set -- --parse-chunk 32 ;;
+              chunk64) set -- --parse-chunk 64 ;;
+              chunk128) set -- --parse-chunk 128 ;;
+              loop) set -- --compile-opt loop ;;
+              intrinsic) set -- --compile-opt intrinsic ;;
+              all) set -- --compile-opt all ;;
+              direct) set -- --source-loader direct ;;
+              *) set -- ;;
+            esac
+            if ! python ports/dos16/build.py --source "$RUNNER_TEMP/mp124" \
+              --watcom "$RUNNER_TEMP/ow" --profile-compile "$@" \
+              > "ports/dos16/build/compile-lab/$mode-build.log" 2>&1; then
+              echo "::warning::$mode compilation failed"
+              tail -n 60 "ports/dos16/build/compile-lab/$mode-build.log"
+              echo "$mode: BUILD_FAILED" >> ports/dos16/build/compile-lab/failures.txt
+              if [ "$mode" = baseline ]; then exit 1; fi
+              echo "::endgroup::"
+              continue
+            fi
+            cp ports/dos16/build/py86.exe "ports/dos16/build/compile-lab/PY86-$mode.EXE"
+            cp ports/dos16/build/py86.map "ports/dos16/build/compile-lab/$mode.map"
+            if ! python ports/dos16/run_dos.py --dosbox "$DOSBOX_STAGING" \
+              --emulator staging --timeout 360 \
+              > "ports/dos16/build/compile-lab/$mode-test.log" 2>&1; then
+              echo "::warning::$mode full DOSBox regression failed"
+              tail -n 40 "ports/dos16/build/compile-lab/$mode-test.log"
+              echo "$mode: REGRESSION_FAILED" >> ports/dos16/build/compile-lab/failures.txt
+              if [ "$mode" = baseline ]; then exit 1; fi
+              echo "::endgroup::"
+              continue
+            fi
+            cp ports/dos16/build/test-results.json \
+              "ports/dos16/build/compile-lab/$mode-tests.json"
+            if ! python ports/dos16/run_compile_lab.py --dosbox "$DOSBOX_STAGING" \
+              --emulator staging --mode "$mode" --timeout 360 \
+              > "ports/dos16/build/compile-lab/$mode-profile.log" 2>&1; then
+              echo "::warning::$mode native timing run failed"
+              tail -n 40 "ports/dos16/build/compile-lab/$mode-profile.log"
+              echo "$mode: PROFILE_FAILED" >> ports/dos16/build/compile-lab/failures.txt
+              if [ "$mode" = baseline ]; then exit 1; fi
+              echo "::endgroup::"
+              continue
+            fi
+            cp ports/dos16/dos-test/PDEM1.OUT \
+              "ports/dos16/build/compile-lab/$mode-DEMO.OUT"
+            cp ports/dos16/dos-test/PCLK.OUT \
+              "ports/dos16/build/compile-lab/$mode-CLOCK.OUT"
+            echo "PASS complete DOSBox suite and source timing: $mode"
+            echo "::endgroup::"
+          done
+      - name: Compare only measured successful candidates
+        if: always()
+        shell: bash
+        run: |
+          python ports/dos16/compare_compile_lab.py | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Package passing 8.3-compatible Tandy V20 A/B binaries
+        if: always()
+        shell: bash
+        run: |
+          python -m py_compile ports/dos16/package_compile_lab.py
+          python ports/dos16/package_compile_lab.py
+      - name: Upload experimental executables, maps, timing and test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PY86-PY-source-compile-lab
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            ports/dos16/build/compile-lab/**
+            ports/dos16/build/compile-profile-*.json
+            ports/dos16/build/compile-profile-emulator.log
+            ports/dos16/dist/PY86-COMPILE-LAB.zip

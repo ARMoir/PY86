@@ -42,6 +42,8 @@
 #define MICROPY_NLR_SETJMP (1)
 #define MICROPY_NO_ALLOCA (1)
 #define MICROPY_HELPER_REPL (1)
+/* Add builtin globals to upstream mp_repl_autocomplete on DOS only. */
+#define PY86_DOS_COMPLETE_BUILTINS (1)
 #define MICROPY_ENABLE_EXTERNAL_IMPORT (1)
 #define MICROPY_READER_POSIX (0)
 #define MICROPY_READER_VFS (0)
@@ -70,7 +72,9 @@ void py86_vm_hook_loop(void);
 #define MICROPY_PY___FILE__ (1)
 #define MICROPY_PY_MATH (1)
 #define MICROPY_ALLOC_PATH_MAX (128)
+#ifndef MICROPY_ALLOC_PARSE_CHUNK_INIT
 #define MICROPY_ALLOC_PARSE_CHUNK_INIT (16)
+#endif
 #define MICROPY_STACK_CHECK (1)
 #define MICROPY_USE_INTERNAL_ERRNO (1)
 #define MICROPY_QSTR_BYTES_IN_HASH (1)
@@ -82,7 +86,8 @@ void py86_vm_hook_loop(void);
 typedef long mp_int_t;
 typedef unsigned long mp_uint_t;
 typedef long mp_off_t;
-#define NORETURN __declspec(noreturn)
+#define MP_NORETURN __declspec(noreturn)
+#define NORETURN MP_NORETURN
 #define MP_WEAK
 #define MP_NOINLINE
 #define MP_ALWAYSINLINE

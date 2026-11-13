@@ -1,0 +1,201 @@
+name: Py86 1.24.1 vs 1.29.0 8086 hardware test package
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compare-and-package:
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Prepare both pinned MicroPython cores in isolated directories
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet --depth 1 --branch v1.24.1 \
+            https://github.com/micropython/micropython.git "$RUNNER_TEMP/mp124"
+          test "$(git -C "$RUNNER_TEMP/mp124" rev-parse HEAD)" = \
+            'ecfdd5d6f9be971852003c2049600dc7b3e2a838'
+          git clone --quiet --depth 1 --branch v1.29.0 \
+            https://github.com/micropython/micropython.git "$RUNNER_TEMP/mp129"
+          test "$(git -C "$RUNNER_TEMP/mp129" rev-parse HEAD)" = \
+            '0fd6c573ea815774668bbb16b8e197c8822368b2'
+          python ports/dos16/prepare_source.py --source "$RUNNER_TEMP/mp124"
+          python ports/dos16/parser_allocator_lab.py patch-source "$RUNNER_TEMP/mp124"
+          mkdir -p ports/dos16/build/upstream-129
+          python ports/dos16/prepare_source_129.py --source "$RUNNER_TEMP/mp129" \
+            --report-dir ports/dos16/build/upstream-129
+          python ports/dos16/parser_allocator_lab.py patch-source "$RUNNER_TEMP/mp129"
+      - name: Install reproducible 16-bit Open Watcom
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-delay 5 \
+            https://github.com/open-watcom/open-watcom-v2/releases/download/2026-11-01-Build/ow-snapshot.tar.xz \
+            --output "$RUNNER_TEMP/ow.tar.xz"
+          mkdir -p "$RUNNER_TEMP/ow"
+          tar -xJf "$RUNNER_TEMP/ow.tar.xz" -C "$RUNNER_TEMP/ow"
+          test -x "$RUNNER_TEMP/ow/binl64/wcc"
+      - name: Install pinned DOSBox Staging 0.83
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-delay 5 \
+            https://github.com/dosbox-staging/dosbox-staging/releases/download/v0.83.0/dosbox-staging-linux-x86_64-v0.83.0.tar.xz \
+            --output "$RUNNER_TEMP/dosbox.tar.xz"
+          echo 'd3a94f7f1c3e68a47ec88d61145506c7904452adb0c9c5928cb8cfe2331d6c5c  '"$RUNNER_TEMP/dosbox.tar.xz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/dosbox"
+          tar -xJf "$RUNNER_TEMP/dosbox.tar.xz" -C "$RUNNER_TEMP/dosbox"
+          exe="$(find "$RUNNER_TEMP/dosbox" -type f -name dosbox -print -quit)"
+          test -x "$exe"
+          echo "DOSBOX_STAGING=$exe" >> "$GITHUB_ENV"
+      - name: Build, regression-test and profile 1.24 BASE/1KA plus 1.29 BASE/1KA
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          set -euo pipefail
+          python -m py_compile ports/dos16/build.py \
+            ports/dos16/package_upstream_129.py \
+            ports/dos16/run_dos.py ports/dos16/run_compile_lab.py
+          for mode in 24base 24opt 29base 29opt; do
+            echo "::group::Native DOS $mode"
+            case "$mode" in
+              24base) src="$RUNNER_TEMP/mp124"; ver=1.24.1; exe=P24BASE.EXE; set -- ;;
+              24opt) src="$RUNNER_TEMP/mp124"; ver=1.24.1; exe=P24OPT.EXE; set -- --parser-alloc-mode block1024 --compile-opt all ;;
+              29base) src="$RUNNER_TEMP/mp129"; ver=1.29.0; exe=P29BASE.EXE; set -- ;;
+              29opt) src="$RUNNER_TEMP/mp129"; ver=1.29.0; exe=P29OPT.EXE; set -- --parser-alloc-mode block1024 --compile-opt all ;;
+            esac
+            python ports/dos16/build.py --source "$src" \
+              --watcom "$RUNNER_TEMP/ow" --core-version "$ver" \
+              --data-layout far128 --runtime-profile "$@" \
+              > "ports/dos16/build/upstream-129/$mode-build.log" 2>&1 || {
+                tail -n 100 "ports/dos16/build/upstream-129/$mode-build.log"
+                exit 1
+              }
+            cp ports/dos16/build/py86.exe "ports/dos16/build/upstream-129/$exe"
+            cp ports/dos16/build/py86.map \
+              "ports/dos16/build/upstream-129/$mode.map"
+            python ports/dos16/run_dos.py --dosbox "$DOSBOX_STAGING" \
+              --emulator staging --core-version "$ver" --timeout 360 \
+              > "ports/dos16/build/upstream-129/$mode-regression.log" 2>&1 || {
+                tail -n 70 "ports/dos16/build/upstream-129/$mode-regression.log"
+                exit 1
+              }
+            cp ports/dos16/build/test-results.json \
+              "ports/dos16/build/upstream-129/$mode-regression.json"
+            python ports/dos16/run_compile_lab.py --dosbox "$DOSBOX_STAGING" \
+              --emulator staging --timeout 360 --parser-stress --runtime-stress \
+              --mode "upstream-$mode" \
+              > "ports/dos16/build/upstream-129/$mode-profile.log" 2>&1 || {
+                tail -n 80 "ports/dos16/build/upstream-129/$mode-profile.log"
+                exit 1
+              }
+            cp "ports/dos16/build/compile-profile-upstream-$mode.json" \
+              "ports/dos16/build/upstream-129/$mode-profile.json"
+            echo "PASS 8086 native full tests and profiles $mode"
+            echo "::endgroup::"
+          done
+      - name: Package verified DOS test executables and automatic A-B scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python ports/dos16/package_upstream_129.py
+          unzip -t ports/dos16/dist/PY86-UPSTREAM-129-LAB.zip
+          unzip -l ports/dos16/dist/PY86-UPSTREAM-129-LAB.zip | tail -n 22
+          echo 'All four validated native DOS builds are packaged.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload experimental ZIP and detailed 8086 regression results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PY86-124-vs-129-8086-tests
+          retention-days: 30
+          if-no-files-found: warn
+          path: |
+            ports/dos16/build/upstream-129/**
+            ports/dos16/dist/PY86-UPSTREAM-129-LAB.zip
+
+  cf-image:
+    name: Optional 16MB FreeDOS FAT16 CF image with validated 1.24 and 1.29 builds
+    needs: compare-and-package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v4
+        with:
+          name: PY86-124-vs-129-8086-tests
+          path: ${{ runner.temp }}/py86-verified
+      - name: Install FreeDOS image creation tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq mtools dosfstools qemu-utils nbd-client parted
+          git clone --quiet https://github.com/flynnsbit/dosforge.git "$RUNNER_TEMP/dosforge"
+          git -C "$RUNNER_TEMP/dosforge" checkout -q a09a2767c9b7cf35d8fe34ae6903e16a8e5dea64
+          python -m pip install -q -e "$RUNNER_TEMP/dosforge"
+      - name: Create bootable 16MB FAT16 FreeDOS CF image
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ports/dos16/dist/cf16
+          zip="$(find "$RUNNER_TEMP/py86-verified" -name 'PY86-UPSTREAM-129-LAB.zip' -print -quit)"
+          test -s "$zip"
+          # dosforge supports hard disk VHD, not a 16MB floppy IMG.
+          # A fixed VHD contains raw sectors followed by its 512-byte footer.
+          # 512 cylinders x 2 heads x 32 sectors gives exactly 16MiB.
+          python -m dosforge create \
+            --media-type vhd --format fat16 --size 16M \
+            --custom-chs 512,2,32 \
+            --boot-mode freedos \
+            --boot-assets-path "$RUNNER_TEMP/dosforge/dosassets/freedos" \
+            --path "$PWD/ports/dos16/dist/cf16/PY86V129.VHD"
+          python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          folder=Path('ports/dos16/dist/cf16')
+          vhd=(folder/'PY86V129.VHD').read_bytes()
+          assert len(vhd)==16777216+512, len(vhd)
+          assert vhd[-512:-504]==b'conectix', 'Missing fixed-VHD footer'
+          raw=vhd[:-512]
+          assert raw[510:512]==bytes((0x55, 0xaa)), 'Missing MBR'
+          (folder/'PY86V129.IMG').write_bytes(raw)
+          print('PASS fixed VHD raw sectors converted into 16MiB CF IMG')
+          PY
+          python ports/dos16/embed_upstream_129_cf.py \
+            --image ports/dos16/dist/cf16/PY86V129.IMG --archive "$zip"
+          test "$(stat -c %s ports/dos16/dist/cf16/PY86V129.IMG)" = 16777216
+          cp "$zip" ports/dos16/dist/cf16/PY86-129-TESTS.zip
+          printf '%s\n' \
+            'PY86 1.24.1 versus 1.29.0 on Tandy 1000 EX NEC V20' \
+            'PY86V129.IMG is 16MB FreeDOS FAT16 bootable disk image.' \
+            'Writing a raw IMG OVERWRITES YOUR WHOLE CF CARD! Back up first.' \
+            'Use a spare card; extra card space beyond 16MB stays unused.' \
+            'No proprietary Microsoft DOS or Windows boot files are used.' \
+            'On DOS run RUN4, inspect four logs. Then RUN12 for twelve.' \
+            'RUN29 is six 1.29.0 BASE/1KA runs. Original .PY is unchanged.' \
+            'PY86-129-TESTS.zip can be copied to your existing bootable DOS.' \
+            > ports/dos16/dist/cf16/README.TXT
+          (cd ports/dos16/dist/cf16 && zip -q -9 PY86V129-TANDY-CF16.zip PY86V129.IMG README.TXT)
+          unzip -t ports/dos16/dist/cf16/PY86V129-TANDY-CF16.zip
+      - name: Retain experimental bootable CF and DOS test package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PY86-129-Tandy-16MB-CF
+          retention-days: 30
+          if-no-files-found: warn
+          path: ports/dos16/dist/cf16/**

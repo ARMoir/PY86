@@ -7,6 +7,7 @@
 #include <signal.h>
 #include <dos.h>
 #include <bios.h>
+#include <conio.h>
 #include <i86.h>
 #include <io.h>
 #include "py/compile.h"
@@ -18,6 +19,11 @@
 #include "py/objlist.h"
 #include "py/builtin.h"
 #include "py86-version.h"
+#if defined(PY86_UPSTREAM_129)
+#define PY86_MP_VERSION "1.29.0"
+#else
+#define PY86_MP_VERSION "1.24.1"
+#endif
 
 /* From moddostime.c: opt-in cursor-home behavior for interactive redraws. */
 extern void py86_set_home_cls(int enabled);
@@ -27,6 +33,28 @@ extern void py86_startup_initialized(void);
 static char *stack_top;
 static void *heap;
 static int py86_exit_requested;
+
+/* Opt-in profiling uses BIOS ticks, keeping the normal build unchanged.
+ * No output is emitted until a script has finished executing. */
+#if defined(PY86_COMPILE_PROFILE)
+static int py86_profile_enabled;
+static unsigned long py86_profile_read_ms;
+#if defined(PY86_RUNTIME_PROFILE)
+static unsigned long py86_gc_runtime_ms;
+static unsigned py86_gc_runtime_calls;
+#endif
+static unsigned long py86_profile_ticks(void) {
+    union REGS in_regs, out_regs;
+    memset(&in_regs, 0, sizeof(in_regs));
+    in_regs.h.ah = 0;
+    int86(0x1a, &in_regs, &out_regs);
+    return ((unsigned long)out_regs.x.cx << 16) | out_regs.x.dx;
+}
+static unsigned long py86_profile_elapsed(unsigned long from, unsigned long to) {
+    unsigned long ticks = to >= from ? to - from : 1573040UL - from + to;
+    return ticks * 55UL - ticks * 75UL / 1000UL;
+}
+#endif
 
 /* Single-segment GC heap selection.  Open Watcom -ml malloc() uses its
  * far heap, but ordinary far pointers cannot wrap their 16-bit offsets.
@@ -117,11 +145,11 @@ static int py86_heap_allocate(void) {
 
 /* Keyboard interrupt support: SIGINT is deferred to safe VM boundaries. */
 const char py86_help_text[] =
-    "Py86: Python 3 for 16-bit DOS (MicroPython 1.24.1)\n"
+    "Py86: Python 3 for 16-bit DOS (MicroPython " PY86_MP_VERSION ")\n"
     "Commands: help(), help(obj), exit(), quit(), input(), print()\n"
-    "Modules: os, sys, time, datetime, math, random, json, re, hashlib, gc, errno\n"
+    "Modules: os, sys, time, datetime, math, random, json, re, hashlib, curses, gc, errno\n"
     "Run: PY86 SCRIPT.PY or PY86 for the interactive prompt.\n"
-    "Ctrl+C interrupts a running program; Ctrl+Z then Enter exits the REPL.\n"
+    "Ctrl+C interrupts Python; Ctrl+Z exits the console REPL.\n"
     "For built-in object information, use help(obj).\n"
     "Type help('modules') to list the available built-in modules.\n";
 
@@ -182,6 +210,170 @@ static mp_obj_t py86_builtin_exit(size_t n_args, const mp_obj_t *args) {
 }
 MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(py86_builtin_exit_obj, 0, 1, py86_builtin_exit);
 
+
+/* DOS-native interactive REPL reader.  Normal redirected stdin keeps the
+ * original fgets() behavior, including DOS pipelines and integration tests.
+ * Only console input is read character-by-character using DOS getch().
+ *
+ * MicroPython's own mp_repl_autocomplete() performs variable/attribute/module
+ * lookup; this reader only captures Tab, appends its returned suffix, and
+ * displays ambiguous matches without ANSI/VT100 terminal escape sequences.
+ */
+#if defined(PY86_REPL_KEYBOARD_TEST)
+static int py86_repl_test_keyboard;
+#endif
+
+static int py86_repl_key(void) {
+    #if defined(PY86_REPL_KEYBOARD_TEST)
+    /* Native DOSBox test: raw key bytes supplied through a redirected file.
+     * This branch is entirely absent from production/release executables. */
+    if (py86_repl_test_keyboard) return getchar();
+    #endif
+    return getch();
+}
+
+static void py86_repl_bell(void) {
+    putchar('\a');
+}
+
+/* Print everything from the new cursor position, remove the old last char
+ * when deleting, and restore the cursor by plain DOS backspaces. */
+static void py86_repl_redraw(const char *line, unsigned cursor,
+                            unsigned used, int clear_tail) {
+    unsigned i;
+    for (i = cursor; i < used; ++i) putchar(line[i]);
+    if (clear_tail) putchar(' ');
+    for (i = cursor; i < used + (clear_tail ? 1U : 0U); ++i) putchar('\b');
+}
+
+/* Return 1 for a complete line, 0 for EOF, -1 for Ctrl+C cancellation. */
+static int py86_repl_readline(char *line, unsigned capacity, const char *prompt) {
+    unsigned used = 0;
+    unsigned cursor = 0;
+    int key;
+    line[0] = '\0';
+    for (;;) {
+        key = py86_repl_key();
+        if (py86_ctrl_c_flag || key == 3) {
+            py86_ctrl_c_flag = 0;
+            line[0] = '\0';
+            puts("^C");
+            return -1;
+        }
+        if (key == EOF || key == 26) {  /* EOF / Ctrl+Z */
+            if (key == 26) putchar('\n');
+            return 0;
+        }
+        if (key == '\r' || key == '\n') {
+            putchar('\n');
+            line[used] = '\0';
+            return 1;
+        }
+        if (key == 0 || key == 0xe0) {
+            int scan = py86_repl_key();
+            if (scan == EOF) return 0;
+            switch (scan) {
+                case 75: /* Left */
+                    if (cursor) { --cursor; putchar('\b'); }
+                    break;
+                case 77: /* Right */
+                    if (cursor < used) putchar(line[cursor++]);
+                    break;
+                case 71: /* Home */
+                    while (cursor) { --cursor; putchar('\b'); }
+                    break;
+                case 79: /* End */
+                    while (cursor < used) putchar(line[cursor++]);
+                    break;
+                case 83: /* Delete at cursor */
+                    if (cursor < used) {
+                        memmove(line + cursor, line + cursor + 1, used - cursor);
+                        --used;
+                        py86_repl_redraw(line, cursor, used, 1);
+                    }
+                    break;
+                default:
+                    break; /* Up/down history will be added separately. */
+            }
+        } else if (key == 8 || key == 127) { /* Backspace */
+            if (cursor) {
+                --cursor;
+                putchar('\b');
+                memmove(line + cursor, line + cursor + 1, used - cursor);
+                --used;
+                py86_repl_redraw(line, cursor, used, 1);
+            } else {
+                py86_repl_bell();
+            }
+        } else if (key == 1) { /* Ctrl+A: beginning of line */
+            while (cursor) { --cursor; putchar('\b'); }
+        } else if (key == 5) { /* Ctrl+E: end of line */
+            while (cursor < used) putchar(line[cursor++]);
+        } else if (key == '\t') {
+            const char *suffix = NULL;
+            size_t addition;
+            /* mp_repl_autocomplete() owns the actual Python semantics.
+             * It returns -1 after printing alternatives, or a suffix. */
+            addition = mp_repl_autocomplete(line, cursor, &mp_plat_print, &suffix);
+            if (addition == (size_t)-1) {
+                unsigned i;
+                fputs(prompt, stdout);
+                fwrite(line, 1, used, stdout);
+                for (i = cursor; i < used; ++i) putchar('\b');
+                /* Preserve cursor when a completion listing reprints text. */
+            } else if (addition == 0 || suffix == NULL ||
+                       addition > capacity - 1U - used) {
+                py86_repl_bell();
+            } else {
+                memmove(line + cursor + addition, line + cursor, used - cursor);
+                memcpy(line + cursor, suffix, addition);
+                used += (unsigned)addition;
+                line[used] = '\0';
+                cursor += (unsigned)addition;
+                /* Fast path for the normal Tab-at-end case: only write new
+                 * characters, with no full-line redraw on the 7 MHz V20. */
+                if (cursor == used) {
+                    fwrite(line + cursor - addition, 1, addition, stdout);
+                } else {
+                    py86_repl_redraw(line, cursor - (unsigned)addition, used, 0);
+                    fwrite(line + cursor - addition, 1, addition, stdout);
+                }
+            }
+        } else if (key >= 32 && key <= 126) {
+            if (used + 1U >= capacity) {
+                py86_repl_bell();
+            } else {
+                memmove(line + cursor + 1, line + cursor, used - cursor);
+                line[cursor] = (char)key;
+                ++used;
+                line[used] = '\0';
+                /* Most keys append at end; avoid three console writes
+                 * and the associated BIOS cursor moves per keystroke. */
+                if (cursor + 1U == used) {
+                    putchar(line[cursor]);
+                } else {
+                    py86_repl_redraw(line, cursor, used, 0);
+                    putchar(line[cursor]);
+                }
+                ++cursor;
+            }
+        } else {
+            /* Unhandled control keys should not insert garbage into Python. */
+        }
+        fflush(stdout);
+    }
+}
+
+static int py86_repl_line(char *line, unsigned capacity, const char *prompt) {
+    int console = py86_console_input;
+    #if defined(PY86_REPL_KEYBOARD_TEST)
+    if (py86_repl_test_keyboard) console = 1;
+    #endif
+    if (console) return py86_repl_readline(line, capacity, prompt);
+    if (!fgets(line, capacity, stdin)) return 0;
+    return 1;
+}
+
 int mp_hal_stdin_rx_chr(void) {
     int c = getchar();
     return c == EOF ? 4 : c == '\n' ? '\r' : c;
@@ -193,6 +385,9 @@ void mp_hal_stdout_tx_str(const char *s) { mp_hal_stdout_tx_strn(s, strlen(s)); 
 void gc_collect(void) {
     jmp_buf regs;
     char *p;
+    #if defined(PY86_RUNTIME_PROFILE)
+    unsigned long gc_begin = py86_profile_enabled ? py86_profile_ticks() : 0;
+    #endif
     /* Watcom stack entries are only 2-byte aligned; far roots are 4 bytes.
        setjmp spills the callee-saved registers before scanning SS==DGROUP. */
     setjmp(regs);
@@ -203,6 +398,12 @@ void gc_collect(void) {
         gc_collect_root(&root, 1);
     }
     gc_collect_end();
+    #if defined(PY86_RUNTIME_PROFILE)
+    if (py86_profile_enabled) {
+        py86_gc_runtime_ms += py86_profile_elapsed(gc_begin, py86_profile_ticks());
+        ++py86_gc_runtime_calls;
+    }
+    #endif
 }
 
 mp_import_stat_t mp_import_stat(const char *path) {
@@ -213,21 +414,54 @@ mp_import_stat_t mp_import_stat(const char *path) {
 
 mp_lexer_t *mp_lexer_new_from_file(qstr filename) {
     const char *path = qstr_str(filename);
-    FILE *f = fopen(path, "rb");
+    FILE *f;
     long len;
     char *buf;
+    #if defined(PY86_COMPILE_PROFILE)
+    unsigned long io_start = py86_profile_ticks();
+    #endif
+    f = fopen(path, "rb");
     if (!f) mp_raise_OSError(MP_ENOENT);
     if (fseek(f, 0, SEEK_END) || (len = ftell(f)) < 0 || len > 24000L) {
         fclose(f); mp_raise_OSError(MP_EFBIG);
     }
     rewind(f);
-    /* Allocate outside GC while reading; release on any allocation exception. */
+    #if defined(PY86_SOURCE_DIRECT)
+    /* Experimental single-copy path: allocate the final lexer-owned GC
+     * buffer directly.  A local exception guard closes the DOS descriptor
+     * even if m_new() fails. The reader frees the buffer after parsing. */
+    {
+        nlr_buf_t nlr;
+        if (nlr_push(&nlr) == 0) {
+            buf = m_new(char, (size_t)len + 1);
+            if (fread(buf, 1, (size_t)len, f) != (size_t)len) {
+                fclose(f);
+                m_del(char, buf, (size_t)len + 1);
+                nlr_pop();
+                mp_raise_OSError(MP_EIO);
+            }
+            fclose(f);
+            buf[len] = 0;
+            #if defined(PY86_COMPILE_PROFILE)
+            py86_profile_read_ms = py86_profile_elapsed(io_start, py86_profile_ticks());
+            #endif
+            nlr_pop();
+            return mp_lexer_new_from_str_len(filename, buf, (size_t)len, (size_t)len + 1);
+        }
+        fclose(f);
+        nlr_jump(nlr.ret_val);
+    }
+    #else
+    /* Production loader intentionally unchanged. */
     buf = malloc((size_t)len + 1);
     if (!buf) { fclose(f); mp_raise_msg(&mp_type_MemoryError, MP_ERROR_TEXT("source buffer")); }
     if (fread(buf, 1, (size_t)len, f) != (size_t)len) {
         free(buf); fclose(f); mp_raise_OSError(MP_EIO);
     }
     fclose(f);
+    #if defined(PY86_COMPILE_PROFILE)
+    py86_profile_read_ms = py86_profile_elapsed(io_start, py86_profile_ticks());
+    #endif
     buf[len] = 0;
     {
         nlr_buf_t nlr;
@@ -241,18 +475,157 @@ mp_lexer_t *mp_lexer_new_from_file(qstr filename) {
         free(buf);
         nlr_jump(nlr.ret_val);
     }
+    #endif
 }
+
+/* Fault injection exists ONLY in the isolated, non-release PY86F.EXE.
+ * The production PY86.EXE compiles none of this code.  Never run this test
+ * binary on physical DOS hardware: an invalid instruction pointer can hang,
+ * corrupt memory, or crash DOS.  DOSBox runs one case per disposable session.
+ */
+#if defined(PY86_TEST_VMFAULT)
+#include "py/objfun.h"
+#include "py/bc.h"
+#include "py/bc0.h"
+static int py86_vm_fault_inject(mp_obj_t object) {
+    const char *mode = getenv("PY86_VMFAULT");
+    mp_obj_fun_bc_t *fun;
+    const byte *cursor;
+    byte *opcode;
+    if (mode == NULL || *mode == '\0') return 0;
+    if (mp_obj_get_type(object) != &mp_type_fun_bc) {
+        fputs("VMFAULT ERROR: expected a bytecode function\n", stderr);
+        return -1;
+    }
+    fun = MP_OBJ_TO_PTR(object);
+    if (strcmp(mode, "bad-pointer") == 0) {
+        /* Deliberately corrupt the compiled function's bytecode pointer. */
+        fun->bytecode = (const byte *)MK_FP(0, 0);
+    } else if (strcmp(mode, "bad-opcode") == 0 ||
+               strcmp(mode, "bad-jump") == 0) {
+        /* Leave the prelude and constant table intact.  Only damage the
+         * executable bytecode, not unrelated memory in the injector. */
+        cursor = fun->bytecode;
+        MP_BC_PRELUDE_SIG_DECODE(cursor);
+        MP_BC_PRELUDE_SIZE_DECODE(cursor);
+        opcode = (byte *)(cursor + n_info + n_cell);
+        if (strcmp(mode, "bad-opcode") == 0) {
+            opcode[0] = 0; /* Reserved opcode: should raise an exception. */
+        } else {
+            /* Valid JUMP with a corrupt ~16K forward destination.
+             * There is no per-instruction IP bounds guard in the VM. */
+            opcode[0] = MP_BC_JUMP;
+            opcode[1] = 0xbf;
+            opcode[2] = 0xff;
+        }
+    } else {
+        fputs("VMFAULT ERROR: invalid fault name\n", stderr);
+        return -1;
+    }
+    printf("VMFAULT INJECTED %s\n", mode);
+    fflush(stdout);
+    return 0;
+}
+#endif
 
 static int execute(const char *source, int file, mp_parse_input_kind_t kind) {
     nlr_buf_t nlr;
+    #if defined(PY86_COMPILE_PROFILE)
+    unsigned long t0 = 0, t1 = 0, t2 = 0, t3 = 0, t4 = 0;
+    unsigned long read_ms = 0;
+    #if defined(PY86_RUNTIME_PROFILE)
+    unsigned long prep_ms = 0;
+    unsigned long forced_gc_ms = 0;
+    unsigned pre_gc_free = 0;
+    unsigned post_gc_free = 0;
+    unsigned runtime_gc_calls = 0;
+    unsigned long runtime_gc_ms = 0;
+    #endif
+    py86_profile_enabled = getenv("PY86_PROFILE") != NULL;
+    if (py86_profile_enabled) {
+        py86_profile_read_ms = 0;
+        t0 = py86_profile_ticks();
+    }
+    #endif
     if (nlr_push(&nlr) == 0) {
         mp_lexer_t *lex = file ? mp_lexer_new_from_file(qstr_from_str(source)) :
             mp_lexer_new_from_str_len(MP_QSTR__lt_stdin_gt_, source, strlen(source), 0);
         qstr name = lex->source_name;
+        #if defined(PY86_COMPILE_PROFILE)
+        if (py86_profile_enabled) {
+            t1 = py86_profile_ticks();
+            read_ms = file ? py86_profile_read_ms : 0;
+        }
+        #endif
         mp_parse_tree_t tree = mp_parse(lex, kind);
+        #if defined(PY86_COMPILE_PROFILE)
+        if (py86_profile_enabled) t2 = py86_profile_ticks();
+        #endif
         mp_obj_t fun = mp_compile(&tree, name, kind == MP_PARSE_SINGLE_INPUT);
+        #if defined(PY86_COMPILE_PROFILE)
+        if (py86_profile_enabled) t3 = py86_profile_ticks();
+        #endif
+        #if defined(PY86_RUNTIME_PROFILE)
+        if (py86_profile_enabled) {
+            gc_info_t pre;
+            unsigned long prep_begin = py86_profile_ticks();
+            gc_info(&pre);
+            pre_gc_free = (unsigned)pre.free;
+            /* Optional pre-execution GC: does not affect parsing or
+             * bytecode. The compiled function stays rooted on the stack. */
+            if (getenv("PY86_PREEXEC_GC") != NULL) {
+                unsigned long collect_begin = py86_profile_ticks();
+                gc_collect();
+                forced_gc_ms = py86_profile_elapsed(collect_begin, py86_profile_ticks());
+            }
+            gc_info(&pre);
+            post_gc_free = (unsigned)pre.free;
+            prep_ms = py86_profile_elapsed(prep_begin, py86_profile_ticks());
+            /* Count only collections performed while Python executes. */
+            py86_gc_runtime_calls = 0;
+            py86_gc_runtime_ms = 0;
+        }
+        #endif
+        #if defined(PY86_TEST_VMFAULT)
+        if (py86_vm_fault_inject(fun) != 0) {
+            nlr_pop();
+            return 4;
+        }
+        #endif
+        #if defined(PY86_RUNTIME_PROFILE)
+        if (py86_profile_enabled) {
+            /* Exclude deliberate preparation/GC overhead from exec_ms.
+             * P86RUNT reports prep_ms so full duration remains measurable. */
+            t3 = py86_profile_ticks();
+        }
+        #endif
         mp_call_function_0(fun);
+        #if defined(PY86_RUNTIME_PROFILE)
+        if (py86_profile_enabled) {
+            runtime_gc_calls = py86_gc_runtime_calls;
+            runtime_gc_ms = py86_gc_runtime_ms;
+        }
+        #endif
         nlr_pop();
+        #if defined(PY86_COMPILE_PROFILE)
+        if (py86_profile_enabled) {
+            gc_info_t gi;
+            t4 = py86_profile_ticks();
+            gc_info(&gi);
+            printf("P86PROF read_ms=%lu lexer_ms=%lu parse_ms=%lu compile_ms=%lu exec_ms=%lu gc_free=%u\n",
+                read_ms,
+                py86_profile_elapsed(t0, t1) - read_ms,
+                py86_profile_elapsed(t1, t2),
+                py86_profile_elapsed(t2, t3),
+                py86_profile_elapsed(t3, t4),
+                (unsigned)gi.free);
+            #if defined(PY86_RUNTIME_PROFILE)
+            printf("P86RUNT gc_calls=%u gc_ms=%lu free_pre=%u free_post=%u prep_ms=%lu forced_gc_ms=%lu\n",
+                runtime_gc_calls, runtime_gc_ms, pre_gc_free, post_gc_free,
+                prep_ms, forced_gc_ms);
+            #endif
+        }
+        #endif
         return 0;
     }
     {
@@ -296,6 +669,9 @@ int main(int argc, char **argv) {
     mp_init();
     py86_startup_initialized();
     py86_console_input = isatty(0);
+    #if defined(PY86_REPL_KEYBOARD_TEST)
+    py86_repl_test_keyboard = getenv("PY86_TEST_REPL_KEYS") != NULL;
+    #endif
     py86_test_ctrl_c = getenv("PY86_TEST_CTRLC") != NULL;
     signal(SIGINT, py86_sigint);
     /* Command switches must be handled before sys.argv is populated.
@@ -326,13 +702,13 @@ int main(int argc, char **argv) {
         puts("Environment: PY86_HEAP=auto|24000..60000");
         puts("             PY86_HEAP_MAX=24000..60000 (auto limit)");
         puts("No script starts the interactive interpreter.");
-        puts("Ctrl+C interrupts Python; Ctrl+Z then Enter exits the prompt.");
+        puts("Ctrl+C interrupts Python; Ctrl+Z exits the interactive prompt.");
         goto done;
     }
     if (argc > first_arg &&
         (strcmp(argv[first_arg], "-V") == 0 ||
          strcmp(argv[first_arg], "--version") == 0)) {
-        puts("Py86 " PY86_VERSION " (MicroPython 1.24.1, 16-bit DOS, 8086/V20)");
+        puts("Py86 " PY86_VERSION " (MicroPython " PY86_MP_VERSION ", 16-bit DOS, 8086/V20)");
         goto done;
     }
     if (argc > first_arg && strcmp(argv[first_arg], "-c") == 0) {
@@ -354,13 +730,19 @@ int main(int argc, char **argv) {
     } else {
         mp_obj_list_append(mp_sys_path, MP_OBJ_NEW_QSTR(MP_QSTR_));
         mp_obj_list_append(mp_sys_argv, mp_obj_new_str("", 0));
-        puts("Py86 " PY86_VERSION " (experimental) - Python 3 for 16-bit DOS");
-        puts("Based on MicroPython 1.24.1");
-        puts("Blank line ends a block; Ctrl-Z then Enter exits.");
+        puts("Py86 " PY86_VERSION " (MicroPython " PY86_MP_VERSION ")");
+        puts("Python 3 for 16-bit DOS");
+        puts("Type \"help()\" for help, \"exit()\" to quit.");
         for (;;) {
+            int line_result;
             source[0] = 0;
             fputs(">>> ", stdout); fflush(stdout);
-            if (!fgets(line, sizeof(line), stdin)) {
+            line_result = py86_repl_line(line, sizeof(line), ">>> ");
+            if (line_result < 0) {
+                puts("KeyboardInterrupt");
+                continue;
+            }
+            if (line_result == 0) {
                 if (py86_ctrl_c_flag) {
                     py86_ctrl_c_flag = 0;
                     clearerr(stdin);
@@ -377,8 +759,14 @@ int main(int argc, char **argv) {
             line[strcspn(line, "\r\n")] = 0;
             strcpy(source, line);
             while (mp_repl_continue_with_input(source)) {
+                int more;
                 fputs("... ", stdout); fflush(stdout);
-                if (!fgets(line, sizeof(line), stdin)) break;
+                more = py86_repl_line(line, sizeof(line), "... ");
+                if (more <= 0) {
+                    if (more < 0) puts("KeyboardInterrupt");
+                    source[0] = 0;
+                    break;
+                }
                 line[strcspn(line, "\r\n")] = 0;
                 if (!line[0]) break;
                 if (strlen(source) + strlen(line) + 1 >= sizeof(source)) {

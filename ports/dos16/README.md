@@ -1,9 +1,9 @@
 # Py86: Python 3 for 16-bit DOS
 
 **Py86** is an experimental Python 3 interpreter for 16-bit MS-DOS, based on
-**MicroPython 1.24.1**. It targets Intel 8086/8088-class CPUs and compatibles,
+**MicroPython 1.29.0** for releases from `master`. It targets Intel 8086/8088-class CPUs and compatibles,
 including NEC V20 machines such as the Tandy 1000 EX.
-It was developed and tested separately from the current `master` branch.
+Development and validated GC batching now live on `master`; historical 1.24.1 work is retained for reference.
 
 **Status:** experimental 16-bit Open Watcom build. GitHub Actions now
 rebuilds and packages Py86 successfully. The original PythonClock has run on
@@ -11,7 +11,44 @@ physical Tandy 1000 EX hardware, but the newly expanded modules have not yet
 been tested there. Older archived DOSBox tests reported `PASS`; these were
 not a fresh emulator test of the expanded module build.
 
-## Versioning and source changes
+## Native DOS curses and Snake
+
+The `master` build includes an 8086/V20-compatible, text-mode-only `curses` subset:
+`initscr()`, `endwin()`, `curs_set()`, `getmaxyx()`, `clear()`, `erase()`,
+`move()`, `addch()`, `addstr()`, `refresh()`, `getch()`, `nodelay()`,
+`timeout()`, `keypad()` and arrow-key constants. It uses BIOS INT 10h and
+INT 16h, with native screen and dirty-cell buffers allocated only when
+`initscr()` is called. No ANSI.SYS, VGA, ncurses, or extra Python package is
+required. Timed input is BIOS-tick limited (about 55 ms resolution), and
+only conventional 40/80-column, 25-row DOS text modes are supported.
+
+Run `RUNSNAKE` from the release ZIP, or `PY86 SNAKE.PY`. Use the arrow keys
+or WASD to steer, P to pause, and Q/Esc to quit. The game deliberately uses
+simple ASCII cells and incremental redraws for slow V20 hardware.
+`PY86 SNAKE.PY --selftest` checks deterministic game rules without using
+interactive keyboard input. The DOSBox test suite exercises the native
+curses API and Snake logic before publishing a release.
+
+This is deliberately **not a full CPython curses implementation**: it has
+one screen window, fixed text attributes, and no color-pair or panel support.
+Call `curses.endwin()` in a `finally` block to restore the DOS cursor.
+
+## Release pipeline (master branch, November 2026)
+
+The production release builds **MicroPython 1.29.0 + 1KA + batched GC root
+scanning**. The pinned source is adapted by `prepare_source_129.py`, the 1 KB
+parser by `parser_allocator_lab.py`, GC root batching by
+`prepare_release_gc129.py`, and Python builtin-name completion by
+`prepare_repl_autocomplete_129.py`. The complete native DOSBox suite and VM-fault
+tests must pass before the release ZIP is uploaded.
+
+Releases are created **only from `master`**. When a new release is published
+and its downloadable ZIP is verified, GitHub Actions deletes all other GitHub
+Releases, their assets and associated release tags. Git commit history is
+preserved. This cleanup is destructive: earlier release downloads cannot
+be recovered from the GitHub Releases page.
+
+## Historical 1.24.1 migration notes (not the current release process)
 
 The port requires an exact checkout of **MicroPython v1.24.1**, commit
 `ecfdd5d6f9be971852003c2049600dc7b3e2a838`. **Do not apply the patch to current
@@ -53,6 +90,28 @@ files to the DOS/CF drive. Start with `PY86` for the interactive `>>>` prompt,
 To exit the console under DOS, use Ctrl-Z followed by Enter. End a multi-line
 REPL block with a blank line. The source file path is resolved using DOS
 filesystem semantics.
+
+## DOS-native interactive Tab completion
+
+On a real DOS console, Py86 now reads interactive keys directly through
+Open Watcom's `getch()` and delegates completion to MicroPython 1.29's
+`mp_repl_autocomplete()`. Press **Tab** to complete built-in names (such
+as `pri` -> `print`), variables, imported modules, and object methods
+(such as `value.up` -> `value.upper`). If multiple completions match, the
+shell displays candidates and restores the `>>>` or `...` prompt without
+requiring ANSI/VT100 terminal support.
+
+**Left/Right**, **Home/End**, **Backspace**, **Delete**, and **Ctrl+A/E**
+support basic editing. **Ctrl+C** cancels the current console input,
+and **Ctrl+Z** exits interactive console mode. Script execution and
+redirected stdin/pipelines continue using the original DOS stdio path,
+with no interpretation of Tab; redirected Ctrl+Z/EOF handling is unchanged.
+
+Completion uses MicroPython's existing qstr/global lookup and does not
+add persistent history or a background index. The line remains limited
+to 255 bytes, preserving the existing small Tandy input buffer. A
+test-only build switch `--repl-keyboard-test` permits injected DOSBox
+keystroke tests; this switch is **never enabled in production releases**.
 
 ## Converting PyPI packages for Py86 (host-side `py86pkg`)
 
@@ -124,6 +183,52 @@ Python GC heap at 48,000 bytes. The default C stack allocation is 16 KiB.
 Available conventional RAM and 64 KiB segmented memory limits still apply.
 The slice-step limitation is documented in `tests/LIMITS.PY`. Runtime speed and
 memory consumption on real 7 MHz V20 hardware are not yet characterized.
+
+## Counting benchmark and interpreter robustness tests
+
+The packaged `RUNCOUNT.BAT` (or `PY86 COUNT16.PY`) measures exactly 65,536
+integer increments, starting at -32768 and finishing after 32767. It reports
+`COUNT16 iterations=65536 elapsed_ms=N` and `PASS count16` after checking
+the final value. Timing excludes DOS program loading, source parsing and
+console output, and uses DOS BIOS ticks at approximately 55 ms resolution.
+Record the output from a physical V20 separately; the GitHub Actions result
+is an emulator measurement, **not** a physical 7 MHz result.
+
+The normal DOSBox integration suite also runs `tests/ROBUST.PY` to check
+positive/negative bytearray and bytes bounds (and memoryview when available), GC pressure and
+retained sentinel data. It checks that invalid `BADSYNT.PY` is rejected with
+a syntax error and that a subsequent Python invocation still runs. These
+are **public-API boundary tests**, not proof that native memory corruption
+is impossible.
+
+A **separate, test-only** `PY86F.EXE` is built with `build.py
+--vm-fault-probe` for fault injection into compiled MicroPython bytecode.
+It uses the *same* production VM and GC object files, but a separate main
+object compiled with `PY86_TEST_VMFAULT`. The production `PY86.EXE`
+contains **no fault-injection interface** and `PY86F.EXE` is **never**
+included in a release or copied to the normal DOS installation.
+
+`run_vm_fault.py` exercises each of the following in a fresh, disposable
+DOSBox process:
+
+- Unmodified bytecode must execute normally.
+- Injected reserved opcode (0x00) must fail with a handled Python exception
+  rather than crashing the DOS process.
+- Corrupted long jump goes outside the compiled function's bytecode buffer.
+- Corrupted function bytecode pointer points at segment 0, offset 0.
+
+The last two intentionally violate VM assumptions and may crash or hang.
+Their exact exception, return, crash and timeout outcomes are captured in
+`build/vm-fault-results.json` and the per-case emulator logs. **They are
+diagnostic/report-only**, because unguarded bytecode is a known limitation,
+and a fault-injection test alone is not a fix for it. The first two tests
+must pass in CI. The `PY86-count-and-VM-integrity` GitHub Actions artifact
+includes the count, memory checks and fault report.
+
+**Do not run `PY86F.EXE` or corrupt-bytecode tests on your Tandy, a
+physical DOS machine, or a drive containing user data.** The safe
+`RUNCOUNT` benchmark and `ROBUST.PY` regression checks are suitable
+for ordinary DOS systems.
 
 ## Reproducibility and test evidence
 
@@ -860,3 +965,23 @@ To test the selection on a real DOS machine run `PY86 --heap-info`.
 For conservative operation use `SET PY86_HEAP=48000`; restore adaptive
 operation with `SET PY86_HEAP=`. This preserves the original proven size
 without rebuilding. A low-memory DOS installation may select a smaller heap.
+
+## Source compilation speed experiments
+
+The opt-in [compilation profiling and real-hardware V20 test plan](COMPILATION_LAB.md)
+measures lexer, parser and bytecode compilation stages for unchanged .PY
+files, and compares parser sizes, targeted Watcom compiler settings and
+file-copy avoidance. The production executable retains its defaults.
+
+## Parser allocator optimization on NEC V20
+
+The opt-in [parser A/B study and Tandy testing plan](PARSER_LAB.md) evaluates
+fixed syntax-tree blocks and geometric growth while retaining the original
+Python source files and unchanged production defaults.
+
+## Runtime profiling: parser versus compiler flags and GC
+
+The opt-in [V20 runtime and GC experiment](RUNTIME_GC_LAB.md) isolates
+parser-block allocation from compiler-only optimization flags, records
+GC time and heap state, and offers a forced pre-execution collection toggle.
+It runs normal `.PY` files unchanged and does not alter release defaults.
