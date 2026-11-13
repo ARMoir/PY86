@@ -11,6 +11,8 @@ py86 CORE.PY > CORE.OUT
 if errorlevel 1 goto fail
 py86 GC.PY > GC.OUT
 if errorlevel 1 goto fail
+py86 GCINCR.PY > GCINCR.OUT
+if errorlevel 1 goto fail
 py86 COUNT16.PY > COUNT16.OUT
 if errorlevel 1 goto fail
 py86 ROBUST.PY > ROBUST.OUT
