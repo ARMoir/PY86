@@ -185,6 +185,13 @@ def enable(source):
     if mod.count(target) != 1:
         raise RuntimeError("Missing gc.stats function")
     mod = mod.replace(target, line + "\n" + target, 1)
+    # Open Watcom C16 also disallows dynamic expressions inside this
+    # automatic aggregate initializer.  Assign the two GC-rooted objects
+    # in sequence instead.
+    mod = once(mod,
+        "    mp_obj_t tup[2] = {mp_obj_new_int(gap), mp_obj_new_int(cap)};",
+        "    mp_obj_t tup[2];\n    tup[0] = mp_obj_new_int(gap);\n    tup[1] = mp_obj_new_int(cap);",
+        "DOS gc.pace tuple initializer")
     mod_file.write_text(mod)
 
     gc = source / "py" / "gc.c"
