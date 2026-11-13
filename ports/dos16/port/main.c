@@ -562,9 +562,11 @@ int main(int argc, char **argv) {
     } else {
         mp_obj_list_append(mp_sys_path, MP_OBJ_NEW_QSTR(MP_QSTR_));
         mp_obj_list_append(mp_sys_argv, mp_obj_new_str("", 0));
-        puts("Py86 " PY86_VERSION " (experimental) - Python 3 for 16-bit DOS");
-        puts("Based on MicroPython " PY86_MP_VERSION);
-        puts("Blank line ends a block; Ctrl-Z then Enter exits.");
+        puts("Py86 " PY86_VERSION " (MicroPython " PY86_MP_VERSION ")");
+        puts("");
+        puts("Python 3 for 16-bit DOS");
+        puts("");
+        puts("Type \"help()\" for help, \"exit()\" to quit.");
         for (;;) {
             source[0] = 0;
             fputs(">>> ", stdout); fflush(stdout);

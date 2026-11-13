@@ -116,7 +116,10 @@ required = {'SMOKE.OUT': ['PASS smoke'], 'METHOD.OUT': ['PASS methods'],
             'MEM60.OUT': ['heap_bytes=60000', 'mode=fixed'],
             'MEMCAP.OUT': ['heap_bytes=32000', 'mode=auto'],
             'INPUT.OUT': ['PASS input'],
-            'REPL.OUT': ['Py86 ' + version, '>>> 3', '42', 'PASS repl_recovery', 'ValueError: repl recovery'],
+            'REPL.OUT': ['Py86 ' + version + ' (MicroPython ' + a.core_version + ')',
+                         'Python 3 for 16-bit DOS',
+                         'Type "help()" for help, "exit()" to quit.',
+                         '>>> 3', '42', 'PASS repl_recovery', 'ValueError: repl recovery'],
             'ERROR.OUT': ['ValueError: intentional exit-code test'],
             'EXCATCH.OUT': ['PASS exit_can_be_caught'],
             'EXIT0.OUT': ['PASS exit0_before'],
@@ -129,6 +132,13 @@ required = {'SMOKE.OUT': ['PASS smoke'], 'METHOD.OUT': ['PASS methods'],
             'REPLCODE.OUT': ['PASS repl_exit_code_before']}
 missing = [f + ': ' + token for f, tokens in required.items() for token in tokens
            if token not in logs.get(f, '')]
+# Ensure CPython-style REPL banner is exact, including blank lines,
+# while retaining the release's dynamically stamped Py86 version.
+expected_banner = ('Py86 ' + version + ' (MicroPython ' + a.core_version + ')\n'
+                   '\nPython 3 for 16-bit DOS\n'
+                   '\nType "help()" for help, "exit()" to quit.\n')
+if expected_banner not in logs.get('REPL.OUT', '').replace('\r\n', '\n'):
+    missing.append('REPL.OUT: incorrect banner or missing blank lines')
 # The measurement must be produced by DOS PY86, with exactly one well-formed result.
 count_lines = [line for line in logs.get('COUNT16.OUT', '').splitlines()
                if line.startswith('COUNT16 iterations=')]
