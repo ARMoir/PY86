@@ -109,7 +109,7 @@ def summary():
     status = json.loads(status_file.read_text()) if status_file.exists() else {}
     data = {"status": "baseline not measured", "candidate_applicable": status.get("patch_applicable"),
             "hardware_validated": False, "measurements": {}}
-    for name in ("baseline", "candidate"):
+    for name in ("baseline", "data", "candidate"):
         dest = OUT / name
         bench = dest / "benchmark.json"
         prof = dest / "runtime-profile.json"
@@ -125,6 +125,8 @@ def summary():
             }
     if "candidate" in data["measurements"]:
         data["status"] = "both versions measured; candidate still requires GC barrier audit"
+    elif "data" in data["measurements"]:
+        data["status"] = "baseline and data-only GC measured; incremental fork NOT PORTED"
     elif "baseline" in data["measurements"]:
         data["status"] = "baseline measured; incremental candidate NOT qualified"
     lines = ["# Py86 incremental GC A/B lab", "",
@@ -134,15 +136,17 @@ def summary():
     if status.get("patch_applicable") is False:
         lines.extend(["Core patch conflict: see patch-check.log and rejects/.",
                       "Never count partial patching as an incremental-GC result.", ""])
-    lines.extend(["| Workload | Baseline ms | Candidate ms | Ratio |",
-                  "|---|---:|---:|---:|"])
+    lines.extend(["| Workload | Baseline ms | Data-only ms | Incremental ms | Data/baseline |",
+                  "|---|---:|---:|---:|---:|"])
     b = data["measurements"].get("baseline", {}).get("bench_median_ms", {})
+    d = data["measurements"].get("data", {}).get("bench_median_ms", {})
     c = data["measurements"].get("candidate", {}).get("bench_median_ms", {})
-    for key in sorted(set(b) | set(c)):
-        x, y = b.get(key), c.get(key)
-        ratio = "{:.3f}x".format(y / x) if x and y else "n/a"
-        lines.append("| {} | {} | {} | {} |".format(
-            key, x if x is not None else "-", y if y is not None else "-", ratio))
+    for key in sorted(set(b) | set(d) | set(c)):
+        x, z, y = b.get(key), d.get(key), c.get(key)
+        ratio = "{:.3f}x".format(z / x) if x and z else "n/a"
+        lines.append("| {} | {} | {} | {} | {} |".format(
+            key, x if x is not None else "-", z if z is not None else "-",
+            y if y is not None else "-", ratio))
     lines.extend(["", "DOSBox Staging fixed 20000-cycle emulator, BIOS ~55ms tick.",
                   "Not a real Tandy V20 result; incremental GC is not certified for hardware.", ""])
     (OUT / "summary.json").write_text(json.dumps(data, indent=2) + "\n")
@@ -157,7 +161,7 @@ def main():
     prep.add_argument("--source", type=Path, required=True)
     prep.add_argument("--fork", type=Path, required=True)
     snap = subs.add_parser("snapshot")
-    snap.add_argument("--label", choices=("baseline", "candidate"), required=True)
+    snap.add_argument("--label", choices=("baseline", "data", "candidate"), required=True)
     subs.add_parser("summary")
     a = cli.parse_args()
     if a.command == "prepare":
