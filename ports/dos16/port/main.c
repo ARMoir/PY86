@@ -316,11 +316,11 @@ static int py86_repl_readline(char *line, unsigned capacity, const char *prompt)
              * It returns -1 after printing alternatives, or a suffix. */
             addition = mp_repl_autocomplete(line, cursor, &mp_plat_print, &suffix);
             if (addition == (size_t)-1) {
+                unsigned i;
                 fputs(prompt, stdout);
                 fwrite(line, 1, used, stdout);
-                while (cursor < used) { putchar('\b'); ++cursor; }
-                cursor = (unsigned)(line[0] ? strlen(line) : 0);
-                /* Reposition if suggestions were requested mid-line. */
+                for (i = cursor; i < used; ++i) putchar('\b');
+                /* Preserve cursor when a completion listing reprints text. */
             } else if (addition == 0 || suffix == NULL ||
                        addition > capacity - 1U - used) {
                 py86_repl_bell();
