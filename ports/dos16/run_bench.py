@@ -20,6 +20,7 @@ def main():
     p.add_argument("--mode", default="baseline")
     p.add_argument("--timeout", type=int, default=220)
     p.add_argument("--vm-tests", action="store_true", help="Include dispatch microbenchmarks")
+    p.add_argument("--gc-tests", action="store_true", help="Include repeated raw-buffer and pointer-GC microbenchmarks")
     p.add_argument("--heap", default="auto",
                    choices=("auto", "24000", "32000", "48000", "60000"),
                    help="PY86_HEAP used for comparison (default: auto)")
@@ -33,6 +34,8 @@ def main():
     for f in (ROOT / "tests" / "pythonclock").glob("*.py"):
         shutil.copy2(f, stage / f.name)
     shutil.copy2(build / "py86.exe", stage / "PY86.EXE")
+    gc_commands = (b"PY86 GCBENCH.PY > GCBENCH.OUT\r\n"
+                   b"if errorlevel 1 goto fail\r\n") if args.gc_tests else b""
     vm_commands = (b"PY86 VMTEST.PY > VMTEST.OUT\r\n"
                    b"if errorlevel 1 goto fail\r\n") if args.vm_tests else b""
     # Set the heap for the entire DOS batch, including --heap-info and
@@ -46,7 +49,7 @@ def main():
         b"if errorlevel 1 goto fail\r\n"
         b"PY86 BENCH1.PY > BENCH1.OUT\r\n"
         b"if errorlevel 1 goto fail\r\n"
-        + vm_commands +
+        + vm_commands + gc_commands +
         b"PY86 FRAMEBEN.PY > FRAMEBEN.OUT\r\n"
         b"if errorlevel 1 goto fail\r\n"
         b"PY86 FRAMEBEN.PY >> FRAMEBEN.OUT\r\n"
@@ -58,7 +61,7 @@ def main():
         b":fail\r\necho FAIL > BENCH.RES\r\n"
         b":done\r\n"
     )
-    for name in ("BENCH1.OUT", "VMTEST.OUT", "FRAMEBEN.OUT",
+    for name in ("BENCH1.OUT", "VMTEST.OUT", "GCBENCH.OUT", "FRAMEBEN.OUT",
                  "HEAPINFO.OUT", "BENCH.RES"):
         (stage / name).unlink(missing_ok=True)
 
@@ -88,8 +91,12 @@ def main():
     parsed = {}
     memories = {}
     logs = {}
-    for script in (("BENCH1", "VMTEST", "FRAMEBEN") if args.vm_tests
-                   else ("BENCH1", "FRAMEBEN")):
+    scripts = ["BENCH1", "FRAMEBEN"]
+    if args.vm_tests:
+        scripts.append("VMTEST")
+    if args.gc_tests:
+        scripts.append("GCBENCH")
+    for script in scripts:
         contents = (stage / (script + ".OUT")).read_text(errors="replace")
         logs[script] = contents
         parsed[script] = {}
@@ -125,6 +132,8 @@ def main():
                 "bound_method", "module_attr", "concat", "clock_frame"}
     if args.vm_tests:
         expected.update(("vm_load", "vm_branch", "vm_call", "vm_global", "vm_tuple"))
+    if args.gc_tests:
+        expected.update(("gc_raw", "gc_refs"))
     result = (stage / "BENCH.RES").read_text().strip() if (stage / "BENCH.RES").exists() else "NO RESULT"
     if result != "PASS" or set(summary) != expected or any("Traceback" in text for text in logs.values()):
         print(json.dumps({"status": result, "raw": logs, "summary": summary}, indent=2))
@@ -159,6 +168,7 @@ def main():
         "gc_free_on_startup": gc_free,
         "heap_info": info_fields,
         "vm_tests": args.vm_tests,
+        "gc_tests": args.gc_tests,
         "memory": memories,
         "summary": summary,
         "trials": parsed,
