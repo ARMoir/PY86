@@ -1,0 +1,127 @@
+name: Py86 DOS Tab completion native regression (experimental)
+
+on:
+  push:
+    branches: [feature/py86-dos-autocomplete]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  console-completion:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Prepare exact MicroPython 1.29.0 1KA/GC release source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m py_compile ports/dos16/build.py ports/dos16/run_dos.py
+          git clone --quiet --depth 1 --branch v1.29.0 \
+            https://github.com/micropython/micropython.git "$RUNNER_TEMP/mp129"
+          test "$(git -C "$RUNNER_TEMP/mp129" rev-parse HEAD)" = \
+            '0fd6c573ea815774668bbb16b8e197c8822368b2'
+          python ports/dos16/prepare_source_129.py \
+            --source "$RUNNER_TEMP/mp129" \
+            --report-dir ports/dos16/build/repl-tab-lab
+          python ports/dos16/parser_allocator_lab.py patch-source "$RUNNER_TEMP/mp129"
+          python ports/dos16/prepare_release_gc129.py --source "$RUNNER_TEMP/mp129"
+      - name: Install exact Open Watcom C16 snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-delay 5 \
+            https://github.com/open-watcom/open-watcom-v2/releases/download/2026-11-01-Build/ow-snapshot.tar.xz \
+            --output "$RUNNER_TEMP/ow.tar.xz"
+          mkdir -p "$RUNNER_TEMP/watcom"
+          tar -xJf "$RUNNER_TEMP/ow.tar.xz" -C "$RUNNER_TEMP/watcom"
+          test -x "$RUNNER_TEMP/watcom/binl64/wcc"
+      - name: Install pinned DOSBox Staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-delay 5 \
+            https://github.com/dosbox-staging/dosbox-staging/releases/download/v0.83.0/dosbox-staging-linux-x86_64-v0.83.0.tar.xz \
+            --output "$RUNNER_TEMP/dosbox.tar.xz"
+          echo 'd3a94f7f1c3e68a47ec88d61145506c7904452adb0c9c5928cb8cfe2331d6c5c  '"$RUNNER_TEMP/dosbox.tar.xz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/dosbox"
+          tar -xJf "$RUNNER_TEMP/dosbox.tar.xz" -C "$RUNNER_TEMP/dosbox"
+          exe="$(find "$RUNNER_TEMP/dosbox" -type f -name dosbox -print -quit)"
+          test -x "$exe"
+          echo "DOSBOX_STAGING=$exe" >> "$GITHUB_ENV"
+      - name: Compile production console reader and pass complete DOSBox suite
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+          PY86_VERSION: 0.26.11.145
+        run: |
+          set -euo pipefail
+          python ports/dos16/build.py \
+            --source "$RUNNER_TEMP/mp129" \
+            --watcom "$RUNNER_TEMP/watcom" \
+            --core-version 1.29.0 \
+            --parser-alloc-mode block1024 \
+            --compile-opt all \
+            --data-layout far128 \
+            --runtime-profile \
+            > ports/dos16/build/repl-tab-lab/production-build.log 2>&1 || {
+              tail -n 120 ports/dos16/build/repl-tab-lab/production-build.log
+              exit 1
+            }
+          cp ports/dos16/build/py86.exe ports/dos16/build/repl-tab-lab/PROD.EXE
+          python ports/dos16/run_dos.py \
+            --dosbox "$DOSBOX_STAGING" \
+            --emulator staging --core-version 1.29.0 --timeout 360 \
+            > ports/dos16/build/repl-tab-lab/production-tests.log 2>&1 || {
+              tail -n 100 ports/dos16/build/repl-tab-lab/production-tests.log
+              exit 1
+            }
+          cp ports/dos16/build/test-results.json ports/dos16/build/repl-tab-lab/production-tests.json
+          echo "PASS: normal production executable and redirected input" >> "$GITHUB_STEP_SUMMARY"
+      - name: Compile test-only keystroke adapter and run DOS editor/Tab completion tests
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+          PY86_VERSION: 0.26.11.145
+        run: |
+          set -euo pipefail
+          python ports/dos16/build.py \
+            --source "$RUNNER_TEMP/mp129" \
+            --watcom "$RUNNER_TEMP/watcom" \
+            --core-version 1.29.0 \
+            --parser-alloc-mode block1024 \
+            --compile-opt all \
+            --data-layout far128 \
+            --runtime-profile \
+            --repl-keyboard-test \
+            > ports/dos16/build/repl-tab-lab/injection-build.log 2>&1 || {
+              tail -n 120 ports/dos16/build/repl-tab-lab/injection-build.log
+              exit 1
+            }
+          python ports/dos16/run_dos.py \
+            --dosbox "$DOSBOX_STAGING" \
+            --emulator staging --core-version 1.29.0 --timeout 360 \
+            --repl-tab-test \
+            > ports/dos16/build/repl-tab-lab/injection-tests.log 2>&1 || {
+              tail -n 120 ports/dos16/build/repl-tab-lab/injection-tests.log
+              cat ports/dos16/dos-test/REPLTAB.OUT || true
+              exit 1
+            }
+          cp ports/dos16/dos-test/REPLTAB.OUT ports/dos16/build/repl-tab-lab/REPLTAB.OUT
+          cp ports/dos16/build/test-results.json ports/dos16/build/repl-tab-lab/injection-tests.json
+          echo "PASS: native DOS editor Tab completion, import, attributes, key editing, Ctrl+C" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload full native regression evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PY86-DOS-Tab-autocomplete-lab
+          retention-days: 30
+          if-no-files-found: warn
+          path: ports/dos16/build/repl-tab-lab/**
