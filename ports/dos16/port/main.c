@@ -330,10 +330,14 @@ static int py86_repl_readline(char *line, unsigned capacity, const char *prompt)
                 used += (unsigned)addition;
                 line[used] = '\0';
                 cursor += (unsigned)addition;
-                py86_repl_redraw(line, cursor - (unsigned)addition, used, 0);
-                /* redraw() moves back to the old insertion start; advance to
-                 * the actual post-completion cursor by printing the suffix. */
-                fwrite(line + cursor - addition, 1, addition, stdout);
+                /* Fast path for the normal Tab-at-end case: only write new
+                 * characters, with no full-line redraw on the 7 MHz V20. */
+                if (cursor == used) {
+                    fwrite(line + cursor - addition, 1, addition, stdout);
+                } else {
+                    py86_repl_redraw(line, cursor - (unsigned)addition, used, 0);
+                    fwrite(line + cursor - addition, 1, addition, stdout);
+                }
             }
         } else if (key >= 32 && key <= 126) {
             if (used + 1U >= capacity) {
@@ -343,8 +347,14 @@ static int py86_repl_readline(char *line, unsigned capacity, const char *prompt)
                 line[cursor] = (char)key;
                 ++used;
                 line[used] = '\0';
-                py86_repl_redraw(line, cursor, used, 0);
-                putchar(line[cursor]);
+                /* Most keys append at end; avoid three console writes
+                 * and the associated BIOS cursor moves per keystroke. */
+                if (cursor + 1U == used) {
+                    putchar(line[cursor]);
+                } else {
+                    py86_repl_redraw(line, cursor, used, 0);
+                    putchar(line[cursor]);
+                }
                 ++cursor;
             }
         } else {
