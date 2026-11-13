@@ -179,13 +179,12 @@ void py86_gc_port_stack_roots(void) {
 """
     main = once(main, anchor, hook + anchor, "DOS stack-root collector")
     main = once(main,
-                "    gc_collect_start();\n    for (p = (char *)&regs;",
+                "    gc_collect_start();",
                 """    // Do not interleave the explicit collector with an unfinished cycle.
     if (gc_incremental_active()) {
         gc_incremental_complete();
     }
-    gc_collect_start();
-    for (p = (char *)&regs;""", "completion before explicit collection")
+    gc_collect_start();""", "completion before explicit collection")
     main_file.write_text(main)
     report = {
         "full_incremental_experimental": True,
