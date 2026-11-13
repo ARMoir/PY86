@@ -44,6 +44,7 @@ jobs:
             ports/dos16/rebase_core_129.py \
             ports/dos16/parser_allocator_lab.py \
             ports/dos16/prepare_release_gc129.py \
+            ports/dos16/prepare_repl_autocomplete_129.py \
             tools/py86pkg/gc129_lab.py \
             ports/dos16/package.py \
             ports/dos16/gen_clock.py \
@@ -80,6 +81,8 @@ jobs:
             --report-dir ports/dos16/build/release129
           python ports/dos16/parser_allocator_lab.py patch-source "$RUNNER_TEMP/micropython-1.29.0"
           python ports/dos16/prepare_release_gc129.py \
+            --source "$RUNNER_TEMP/micropython-1.29.0"
+          python ports/dos16/prepare_repl_autocomplete_129.py \
             --source "$RUNNER_TEMP/micropython-1.29.0"
 
       - name: Build qualified MicroPython 1.29.0 1KA + GC for 8086/V20

@@ -35,6 +35,8 @@ p.add_argument('--profile-compile', action='store_true',
                help='Include opt-in BIOS-tick compile timing, enabled by PY86_PROFILE=1')
 p.add_argument('--runtime-profile', action='store_true',
                help='Log GC collections and memory around Python execution; includes compile profile')
+p.add_argument('--repl-keyboard-test', action='store_true',
+               help='Test-only redirected keystroke injection into DOS REPL; NEVER release')
 p.add_argument('--vm-fault-probe', action='store_true',
                help='Also build test-only PY86F.EXE with bytecode fault injection (never release)')
 p.add_argument('--data-layout',
@@ -139,6 +141,8 @@ def per_file_flags(c):
             'block512': 1, 'block1024': 2, 'block2048': 3, 'geometric': 4,
         }[args.parser_alloc_mode]))
     if c.name == 'main.c':
+        if args.repl_keyboard_test:
+            selected.append('-dPY86_REPL_KEYBOARD_TEST=1')
         if args.core_version == '1.29.0':
             selected.append('-dPY86_UPSTREAM_129=1')
         if args.source_loader == 'direct':

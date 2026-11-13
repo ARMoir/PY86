@@ -7,6 +7,7 @@
 #include <signal.h>
 #include <dos.h>
 #include <bios.h>
+#include <conio.h>
 #include <i86.h>
 #include <io.h>
 #include "py/compile.h"
@@ -148,7 +149,7 @@ const char py86_help_text[] =
     "Commands: help(), help(obj), exit(), quit(), input(), print()\n"
     "Modules: os, sys, time, datetime, math, random, json, re, hashlib, gc, errno\n"
     "Run: PY86 SCRIPT.PY or PY86 for the interactive prompt.\n"
-    "Ctrl+C interrupts a running program; Ctrl+Z then Enter exits the REPL.\n"
+    "Ctrl+C interrupts Python; Ctrl+Z exits the console REPL.\n"
     "For built-in object information, use help(obj).\n"
     "Type help('modules') to list the available built-in modules.\n";
 
@@ -208,6 +209,170 @@ static mp_obj_t py86_builtin_exit(size_t n_args, const mp_obj_t *args) {
     mp_raise_type_arg(&mp_type_SystemExit, args[0]);
 }
 MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(py86_builtin_exit_obj, 0, 1, py86_builtin_exit);
+
+
+/* DOS-native interactive REPL reader.  Normal redirected stdin keeps the
+ * original fgets() behavior, including DOS pipelines and integration tests.
+ * Only console input is read character-by-character using DOS getch().
+ *
+ * MicroPython's own mp_repl_autocomplete() performs variable/attribute/module
+ * lookup; this reader only captures Tab, appends its returned suffix, and
+ * displays ambiguous matches without ANSI/VT100 terminal escape sequences.
+ */
+#if defined(PY86_REPL_KEYBOARD_TEST)
+static int py86_repl_test_keyboard;
+#endif
+
+static int py86_repl_key(void) {
+    #if defined(PY86_REPL_KEYBOARD_TEST)
+    /* Native DOSBox test: raw key bytes supplied through a redirected file.
+     * This branch is entirely absent from production/release executables. */
+    if (py86_repl_test_keyboard) return getchar();
+    #endif
+    return getch();
+}
+
+static void py86_repl_bell(void) {
+    putchar('\a');
+}
+
+/* Print everything from the new cursor position, remove the old last char
+ * when deleting, and restore the cursor by plain DOS backspaces. */
+static void py86_repl_redraw(const char *line, unsigned cursor,
+                            unsigned used, int clear_tail) {
+    unsigned i;
+    for (i = cursor; i < used; ++i) putchar(line[i]);
+    if (clear_tail) putchar(' ');
+    for (i = cursor; i < used + (clear_tail ? 1U : 0U); ++i) putchar('\b');
+}
+
+/* Return 1 for a complete line, 0 for EOF, -1 for Ctrl+C cancellation. */
+static int py86_repl_readline(char *line, unsigned capacity, const char *prompt) {
+    unsigned used = 0;
+    unsigned cursor = 0;
+    int key;
+    line[0] = '\0';
+    for (;;) {
+        key = py86_repl_key();
+        if (py86_ctrl_c_flag || key == 3) {
+            py86_ctrl_c_flag = 0;
+            line[0] = '\0';
+            puts("^C");
+            return -1;
+        }
+        if (key == EOF || key == 26) {  /* EOF / Ctrl+Z */
+            if (key == 26) putchar('\n');
+            return 0;
+        }
+        if (key == '\r' || key == '\n') {
+            putchar('\n');
+            line[used] = '\0';
+            return 1;
+        }
+        if (key == 0 || key == 0xe0) {
+            int scan = py86_repl_key();
+            if (scan == EOF) return 0;
+            switch (scan) {
+                case 75: /* Left */
+                    if (cursor) { --cursor; putchar('\b'); }
+                    break;
+                case 77: /* Right */
+                    if (cursor < used) putchar(line[cursor++]);
+                    break;
+                case 71: /* Home */
+                    while (cursor) { --cursor; putchar('\b'); }
+                    break;
+                case 79: /* End */
+                    while (cursor < used) putchar(line[cursor++]);
+                    break;
+                case 83: /* Delete at cursor */
+                    if (cursor < used) {
+                        memmove(line + cursor, line + cursor + 1, used - cursor);
+                        --used;
+                        py86_repl_redraw(line, cursor, used, 1);
+                    }
+                    break;
+                default:
+                    break; /* Up/down history will be added separately. */
+            }
+        } else if (key == 8 || key == 127) { /* Backspace */
+            if (cursor) {
+                --cursor;
+                putchar('\b');
+                memmove(line + cursor, line + cursor + 1, used - cursor);
+                --used;
+                py86_repl_redraw(line, cursor, used, 1);
+            } else {
+                py86_repl_bell();
+            }
+        } else if (key == 1) { /* Ctrl+A: beginning of line */
+            while (cursor) { --cursor; putchar('\b'); }
+        } else if (key == 5) { /* Ctrl+E: end of line */
+            while (cursor < used) putchar(line[cursor++]);
+        } else if (key == '\t') {
+            const char *suffix = NULL;
+            size_t addition;
+            /* mp_repl_autocomplete() owns the actual Python semantics.
+             * It returns -1 after printing alternatives, or a suffix. */
+            addition = mp_repl_autocomplete(line, cursor, &mp_plat_print, &suffix);
+            if (addition == (size_t)-1) {
+                unsigned i;
+                fputs(prompt, stdout);
+                fwrite(line, 1, used, stdout);
+                for (i = cursor; i < used; ++i) putchar('\b');
+                /* Preserve cursor when a completion listing reprints text. */
+            } else if (addition == 0 || suffix == NULL ||
+                       addition > capacity - 1U - used) {
+                py86_repl_bell();
+            } else {
+                memmove(line + cursor + addition, line + cursor, used - cursor);
+                memcpy(line + cursor, suffix, addition);
+                used += (unsigned)addition;
+                line[used] = '\0';
+                cursor += (unsigned)addition;
+                /* Fast path for the normal Tab-at-end case: only write new
+                 * characters, with no full-line redraw on the 7 MHz V20. */
+                if (cursor == used) {
+                    fwrite(line + cursor - addition, 1, addition, stdout);
+                } else {
+                    py86_repl_redraw(line, cursor - (unsigned)addition, used, 0);
+                    fwrite(line + cursor - addition, 1, addition, stdout);
+                }
+            }
+        } else if (key >= 32 && key <= 126) {
+            if (used + 1U >= capacity) {
+                py86_repl_bell();
+            } else {
+                memmove(line + cursor + 1, line + cursor, used - cursor);
+                line[cursor] = (char)key;
+                ++used;
+                line[used] = '\0';
+                /* Most keys append at end; avoid three console writes
+                 * and the associated BIOS cursor moves per keystroke. */
+                if (cursor + 1U == used) {
+                    putchar(line[cursor]);
+                } else {
+                    py86_repl_redraw(line, cursor, used, 0);
+                    putchar(line[cursor]);
+                }
+                ++cursor;
+            }
+        } else {
+            /* Unhandled control keys should not insert garbage into Python. */
+        }
+        fflush(stdout);
+    }
+}
+
+static int py86_repl_line(char *line, unsigned capacity, const char *prompt) {
+    int console = py86_console_input;
+    #if defined(PY86_REPL_KEYBOARD_TEST)
+    if (py86_repl_test_keyboard) console = 1;
+    #endif
+    if (console) return py86_repl_readline(line, capacity, prompt);
+    if (!fgets(line, capacity, stdin)) return 0;
+    return 1;
+}
 
 int mp_hal_stdin_rx_chr(void) {
     int c = getchar();
@@ -504,6 +669,9 @@ int main(int argc, char **argv) {
     mp_init();
     py86_startup_initialized();
     py86_console_input = isatty(0);
+    #if defined(PY86_REPL_KEYBOARD_TEST)
+    py86_repl_test_keyboard = getenv("PY86_TEST_REPL_KEYS") != NULL;
+    #endif
     py86_test_ctrl_c = getenv("PY86_TEST_CTRLC") != NULL;
     signal(SIGINT, py86_sigint);
     /* Command switches must be handled before sys.argv is populated.
@@ -534,7 +702,7 @@ int main(int argc, char **argv) {
         puts("Environment: PY86_HEAP=auto|24000..60000");
         puts("             PY86_HEAP_MAX=24000..60000 (auto limit)");
         puts("No script starts the interactive interpreter.");
-        puts("Ctrl+C interrupts Python; Ctrl+Z then Enter exits the prompt.");
+        puts("Ctrl+C interrupts Python; Ctrl+Z exits the interactive prompt.");
         goto done;
     }
     if (argc > first_arg &&
@@ -566,9 +734,15 @@ int main(int argc, char **argv) {
         puts("Python 3 for 16-bit DOS");
         puts("Type \"help()\" for help, \"exit()\" to quit.");
         for (;;) {
+            int line_result;
             source[0] = 0;
             fputs(">>> ", stdout); fflush(stdout);
-            if (!fgets(line, sizeof(line), stdin)) {
+            line_result = py86_repl_line(line, sizeof(line), ">>> ");
+            if (line_result < 0) {
+                puts("KeyboardInterrupt");
+                continue;
+            }
+            if (line_result == 0) {
                 if (py86_ctrl_c_flag) {
                     py86_ctrl_c_flag = 0;
                     clearerr(stdin);
@@ -585,8 +759,14 @@ int main(int argc, char **argv) {
             line[strcspn(line, "\r\n")] = 0;
             strcpy(source, line);
             while (mp_repl_continue_with_input(source)) {
+                int more;
                 fputs("... ", stdout); fflush(stdout);
-                if (!fgets(line, sizeof(line), stdin)) break;
+                more = py86_repl_line(line, sizeof(line), "... ");
+                if (more <= 0) {
+                    if (more < 0) puts("KeyboardInterrupt");
+                    source[0] = 0;
+                    break;
+                }
                 line[strcspn(line, "\r\n")] = 0;
                 if (!line[0]) break;
                 if (strlen(source) + strlen(line) + 1 >= sizeof(source)) {

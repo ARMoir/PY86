@@ -15,8 +15,9 @@ not a fresh emulator test of the expanded module build.
 
 The production release builds **MicroPython 1.29.0 + 1KA + batched GC root
 scanning**. The pinned source is adapted by `prepare_source_129.py`, the 1 KB
-parser by `parser_allocator_lab.py`, and the GC root batching by
-`prepare_release_gc129.py`. The complete native DOSBox suite and VM-fault
+parser by `parser_allocator_lab.py`, GC root batching by
+`prepare_release_gc129.py`, and Python builtin-name completion by
+`prepare_repl_autocomplete_129.py`. The complete native DOSBox suite and VM-fault
 tests must pass before the release ZIP is uploaded.
 
 Releases are created **only from `main`**. When a new release is published
@@ -67,6 +68,28 @@ files to the DOS/CF drive. Start with `PY86` for the interactive `>>>` prompt,
 To exit the console under DOS, use Ctrl-Z followed by Enter. End a multi-line
 REPL block with a blank line. The source file path is resolved using DOS
 filesystem semantics.
+
+## DOS-native interactive Tab completion
+
+On a real DOS console, Py86 now reads interactive keys directly through
+Open Watcom's `getch()` and delegates completion to MicroPython 1.29's
+`mp_repl_autocomplete()`. Press **Tab** to complete built-in names (such
+as `pri` -> `print`), variables, imported modules, and object methods
+(such as `value.up` -> `value.upper`). If multiple completions match, the
+shell displays candidates and restores the `>>>` or `...` prompt without
+requiring ANSI/VT100 terminal support.
+
+**Left/Right**, **Home/End**, **Backspace**, **Delete**, and **Ctrl+A/E**
+support basic editing. **Ctrl+C** cancels the current console input,
+and **Ctrl+Z** exits interactive console mode. Script execution and
+redirected stdin/pipelines continue using the original DOS stdio path,
+with no interpretation of Tab; redirected Ctrl+Z/EOF handling is unchanged.
+
+Completion uses MicroPython's existing qstr/global lookup and does not
+add persistent history or a background index. The line remains limited
+to 255 bytes, preserving the existing small Tandy input buffer. A
+test-only build switch `--repl-keyboard-test` permits injected DOSBox
+keystroke tests; this switch is **never enabled in production releases**.
 
 ## Converting PyPI packages for Py86 (host-side `py86pkg`)
 

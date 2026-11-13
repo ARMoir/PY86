@@ -42,6 +42,8 @@
 #define MICROPY_NLR_SETJMP (1)
 #define MICROPY_NO_ALLOCA (1)
 #define MICROPY_HELPER_REPL (1)
+/* Add builtin globals to upstream mp_repl_autocomplete on DOS only. */
+#define PY86_DOS_COMPLETE_BUILTINS (1)
 #define MICROPY_ENABLE_EXTERNAL_IMPORT (1)
 #define MICROPY_READER_POSIX (0)
 #define MICROPY_READER_VFS (0)

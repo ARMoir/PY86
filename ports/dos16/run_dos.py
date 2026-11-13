@@ -13,6 +13,8 @@ p.add_argument('--emulator', choices=('classic', 'staging'), default='classic')
 p.add_argument('--core-version', choices=('1.24.1','1.29.0'), default='1.24.1',
                help='Version string expected in the optional 1.29.0 migration test')
 p.add_argument('--timeout', type=int, default=120)
+p.add_argument('--repl-tab-test', action='store_true',
+               help='Native DOSBox test of Tab/keyboard editing with a test-only EXE')
 a = p.parse_args()
 version = (root / 'build' / 'py86-version.txt').read_text(encoding='ascii').strip()
 stage = root / 'dos-test'
@@ -56,13 +58,45 @@ if clock_src.count('while True:') != 1:
 for f in stage.glob('*.OUT'):
     f.unlink()
 (stage / 'RESULT.TXT').unlink(missing_ok=True)
+
+if a.repl_tab_test:
+    # Raw DOS key bytes: Tab (09), extended left arrow (00 4B), Ctrl+C (03).
+    # The test-mode EXE reads these bytes through the same DOS line editor
+    # used by getch() on real hardware; production uses getch() only on TTY.
+    (stage / 'REPLTAB.IN').write_bytes(
+        b"pri\t('PASS tab_builtin')\r\n"
+        b"imp\tos\r\n"
+        b"print('PASS tab_import')\r\n"
+        b"text = 'hello'\r\n"
+        b"print(text.up\t())\r\n"
+        b"prit\x00Kn\x00O('PASS tab_cursor')\r\n"
+        b"printf\x08('PASS tab_backspace')\r\n"
+        b"text.st\t\x03"
+        b"print('PASS tab_recovery')\r\n"
+        b"exit()\r\n"
+    )
+    (stage / 'TABCHECK.BAT').write_bytes(
+        b"@echo off\r\n"
+        b"set PY86_TEST_REPL_KEYS=1\r\n"
+        b"py86 < REPLTAB.IN > REPLTAB.OUT\r\n"
+        b"set PY86_TEST_REPL_KEYS=\r\n"
+        b"if errorlevel 1 goto fail\r\n"
+        b"echo PASS > TABRES.TXT\r\n"
+        b"goto end\r\n"
+        b":fail\r\n"
+        b"echo FAIL > TABRES.TXT\r\n"
+        b":end\r\n"
+    )
+    (stage / 'TABRES.TXT').unlink(missing_ok=True)
+
 conf = root / 'build/dosbox.conf'
 video = ('[sdl]\nfullscreen=false\n' if a.emulator == 'staging'
          else '[sdl]\nfullscreen=false\noutput=surface\n')
 cpu = ('core=normal\ncpu_cycles=20000\n' if a.emulator == 'staging'
        else 'core=normal\ncputype=8086\ncycles=fixed 20000\n')
 conf.write_text(video + '[dosbox]\nmemsize=1\n[cpu]\n' + cpu +
-                '[autoexec]\nmount c "' + str(stage) + '"\nc:\ncall RUN.BAT\nexit\n')
+                '[autoexec]\nmount c "' + str(stage) + '"\nc:\ncall RUN.BAT\n' +
+                ('call TABCHECK.BAT\n' if a.repl_tab_test else '') + 'exit\n')
 runner_opts = {}
 if os.name == 'nt':
     startup = subprocess.STARTUPINFO()
@@ -132,6 +166,31 @@ required = {'SMOKE.OUT': ['PASS smoke'], 'METHOD.OUT': ['PASS methods'],
             'REPLCODE.OUT': ['PASS repl_exit_code_before']}
 missing = [f + ': ' + token for f, tokens in required.items() for token in tokens
            if token not in logs.get(f, '')]
+
+if a.repl_tab_test:
+    tab_content = logs.get('REPLTAB.OUT', '')
+    needed = (
+        "print('PASS tab_builtin')",
+        "PASS tab_builtin",
+        "import os",
+        "PASS tab_import",
+        "HELLO",
+        "PASS tab_cursor",
+        "PASS tab_backspace",
+        "startswith",
+        "strip",
+        "KeyboardInterrupt",
+        "PASS tab_recovery",
+    )
+    for token in needed:
+        if token not in tab_content:
+            missing.append("REPLTAB.OUT: " + repr(token))
+    if 'SyntaxError:' in tab_content or 'NameError:' in tab_content:
+        missing.append('REPLTAB.OUT: Python traceback during completion test')
+    if not (stage / 'TABRES.TXT').is_file() or (
+            stage / 'TABRES.TXT').read_text().strip() != 'PASS':
+        missing.append('TABCHECK.BAT: no PASS')
+
 # Ensure CPython-style REPL banner is exact, including blank lines,
 # while retaining the release's dynamically stamped Py86 version.
 expected_banner = ('Py86 ' + version + ' (MicroPython ' + a.core_version + ')\n'
