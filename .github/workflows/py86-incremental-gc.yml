@@ -34,7 +34,7 @@ jobs:
 
       - name: Validate experiment scripts
         run: |
-          python -m py_compile tools/py86pkg/incremental_gc_lab.py ports/dos16/build.py ports/dos16/run_dos.py ports/dos16/run_bench.py
+          python -m py_compile tools/py86pkg/incremental_gc_lab.py ports/dos16/build.py ports/dos16/run_dos.py ports/dos16/run_bench.py ports/dos16/prepare_data_gc_lab.py
 
       - name: Clone pinned MicroPython 1.29 and pinned GC fork
         shell: bash
@@ -104,6 +104,38 @@ jobs:
             --emulator staging --mode incremental-baseline \
             --runtime-stress --timeout 360
           python tools/py86pkg/incremental_gc_lab.py snapshot --label baseline
+
+      - name: Prepare DOS16 data-only GC candidate from fork's scan-skip idea
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp -a "$RUNNER_TEMP/mp129" "$RUNNER_TEMP/mp129-data"
+          python ports/dos16/prepare_data_gc_lab.py --source "$RUNNER_TEMP/mp129-data"
+          cp "$RUNNER_TEMP/mp129-data/py86-data-gc.json" \
+            ports/dos16/build/incremental-gc/data-source.json
+
+      - name: Build DOS16 data-only GC prototype
+        shell: bash
+        run: |
+          set -euo pipefail
+          python ports/dos16/build.py --source "$RUNNER_TEMP/mp129-data" \
+            --watcom "$RUNNER_TEMP/watcom" --core-version 1.29.0 \
+            --parser-alloc-mode block1024 --compile-opt all \
+            --data-layout far128 --runtime-profile
+
+      - name: Run equivalent DOS16 tests and benchmark with data-only GC
+        shell: bash
+        run: |
+          set -euo pipefail
+          python ports/dos16/run_dos.py --dosbox "$DOSBOX_STAGING" \
+            --emulator staging --core-version 1.29.0 --timeout 300
+          python ports/dos16/run_bench.py --dosbox "$DOSBOX_STAGING" \
+            --emulator staging --mode incremental-data \
+            --heap 48000 --timeout 300
+          python ports/dos16/run_compile_lab.py --dosbox "$DOSBOX_STAGING" \
+            --emulator staging --mode incremental-data \
+            --runtime-stress --timeout 360
+          python tools/py86pkg/incremental_gc_lab.py snapshot --label data
 
       - name: Check full upstream GC changes against patched DOS16 core
         id: compatible
