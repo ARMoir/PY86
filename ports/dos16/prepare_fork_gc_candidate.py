@@ -155,11 +155,6 @@ def enable(source):
         segment = gc_src[pos:end]
         if "uint32_t t0 =" not in segment:
             raise RuntimeError("Expected conditional timing declaration missing")
-        # Provide a zero-valued timing origin when the DOS port has no
-        # microsecond clock; fixed word/block budgets still bound slices.
-        gc_src = gc_src[:pos] + gc_src[pos:].replace(
-            "#if MICROPY_GC_USTIME_AVAILABLE\\n    uint32_t t0 =",
-            "#if MICROPY_GC_USTIME_AVAILABLE\\n    uint32_t t0 =", 1)
         # Insert the fallback after the timing block, without changing
         # the high-resolution clock branch for other ports.
         pos = gc_src.index(signature)
@@ -168,12 +163,12 @@ def enable(source):
         block = gc_src[start:stop]
         if "uint32_t t0 =" not in block:
             raise RuntimeError("Timing block changed")
-        gc_src = gc_src[:stop] + "#else\\n    uint32_t t0 = 0;\\n    " + gc_src[stop:]
+        gc_src = gc_src[:stop] + "#else\n    uint32_t t0 = 0;\n    " + gc_src[stop:]
     # Split-heap allocation cursor does not exist in the single-area DOS
     # memory state; the fork has one unconditional reference.
     gc_src = once(gc_src,
-        "    MP_STATE_MEM(gc_last_free_area) = &MP_STATE_MEM(area);\\n    gc_inc_sw_area = &MP_STATE_MEM(area);",
-        "    #if MICROPY_GC_SPLIT_HEAP\\n    MP_STATE_MEM(gc_last_free_area) = &MP_STATE_MEM(area);\\n    #endif\\n    gc_inc_sw_area = &MP_STATE_MEM(area);",
+        "    MP_STATE_MEM(gc_last_free_area) = &MP_STATE_MEM(area);\n    gc_inc_sw_area = &MP_STATE_MEM(area);",
+        "    #if MICROPY_GC_SPLIT_HEAP\n    MP_STATE_MEM(gc_last_free_area) = &MP_STATE_MEM(area);\n    #endif\n    gc_inc_sw_area = &MP_STATE_MEM(area);",
         "single-heap incremental sweep cursor")
     gc_file.write_text(gc_src)
 
@@ -185,11 +180,11 @@ def enable(source):
                  if "static const char *const names[29]" in x), None)
     if line is None or mod.count(line) != 1:
         raise RuntimeError("Missing fork gc.stats names initializer")
-    mod = mod.replace(line + "\\n", "", 1)
+    mod = mod.replace(line + "\n", "", 1)
     target = "static mp_obj_t gc_stats(void) {"
     if mod.count(target) != 1:
         raise RuntimeError("Missing gc.stats function")
-    mod = mod.replace(target, line + "\\n" + target, 1)
+    mod = mod.replace(target, line + "\n" + target, 1)
     mod_file.write_text(mod)
 
     gc = source / "py" / "gc.c"
