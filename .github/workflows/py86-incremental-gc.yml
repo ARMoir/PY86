@@ -34,7 +34,7 @@ jobs:
 
       - name: Validate experiment scripts
         run: |
-          python -m py_compile tools/py86pkg/incremental_gc_lab.py ports/dos16/build.py ports/dos16/run_dos.py ports/dos16/run_bench.py ports/dos16/prepare_data_gc_lab.py ports/dos16/prepare_fork_gc_candidate.py
+          python -m py_compile tools/py86pkg/incremental_gc_lab.py ports/dos16/build.py ports/dos16/run_dos.py ports/dos16/run_bench.py ports/dos16/prepare_data_gc_lab.py ports/dos16/prepare_fork_gc_candidate.py tools/py86pkg/tandy_gc_kit.py
 
       - name: Clone pinned MicroPython 1.29 and pinned GC fork
         shell: bash
@@ -136,6 +136,19 @@ jobs:
             --emulator staging --mode incremental-data \
             --runtime-stress --timeout 360
           python tools/py86pkg/incremental_gc_lab.py snapshot --label data
+
+      - name: Package verified baseline and data-only Tandy test kit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/py86pkg/tandy_gc_kit.py package
+
+      - name: Run the actual Tandy RUN48 batch in DOSBox and verify every output
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tools/py86pkg/tandy_gc_kit.py verify \
+            --dosbox "$DOSBOX_STAGING" --timeout 420
 
       - name: Check full upstream GC changes against patched DOS16 core
         id: compatible
