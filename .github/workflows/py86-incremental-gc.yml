@@ -34,7 +34,7 @@ jobs:
 
       - name: Validate experiment scripts
         run: |
-          python -m py_compile tools/py86pkg/incremental_gc_lab.py ports/dos16/build.py ports/dos16/run_dos.py ports/dos16/run_bench.py ports/dos16/prepare_data_gc_lab.py
+          python -m py_compile tools/py86pkg/incremental_gc_lab.py ports/dos16/build.py ports/dos16/run_dos.py ports/dos16/run_bench.py ports/dos16/prepare_data_gc_lab.py ports/dos16/prepare_fork_gc_candidate.py
 
       - name: Clone pinned MicroPython 1.29 and pinned GC fork
         shell: bash
@@ -151,6 +151,60 @@ jobs:
             echo "candidate=false" >> "$GITHUB_OUTPUT"
             echo "::notice::Fork source needs DOS16 rebase. See patch rejection report. No candidate performance claim."
           fi
+
+      - name: Resolve validated DOS16 three-way conflicts in fork core
+        id: fork_rebase
+        if: steps.compatible.outputs.candidate == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python ports/dos16/prepare_fork_gc_candidate.py \
+            --source "$RUNNER_TEMP/mp129-candidate" --mode resolve
+
+      - name: Compile merged fork source before enabling incremental GC
+        if: steps.fork_rebase.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python ports/dos16/build.py --source "$RUNNER_TEMP/mp129-candidate" \
+            --watcom "$RUNNER_TEMP/watcom" --core-version 1.29.0 \
+            --parser-alloc-mode block1024 --compile-opt all \
+            --data-layout far128 --runtime-profile
+          cp ports/dos16/build/py86.exe ports/dos16/build/incremental-gc/FORKCORE.EXE
+
+      - name: Enable actual incremental GC with DOS16 root hooks and bounded slices
+        if: steps.fork_rebase.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python ports/dos16/prepare_fork_gc_candidate.py \
+            --source "$RUNNER_TEMP/mp129-candidate" --mode enable
+
+      - name: Compile real incremental GC candidate for 16-bit DOS
+        if: steps.fork_rebase.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python ports/dos16/build.py --source "$RUNNER_TEMP/mp129-candidate" \
+            --watcom "$RUNNER_TEMP/watcom" --core-version 1.29.0 \
+            --parser-alloc-mode block1024 --compile-opt all \
+            --data-layout far128 --runtime-profile
+          cp ports/dos16/build/py86.exe ports/dos16/build/incremental-gc/INCGC.EXE
+
+      - name: Stress-test and benchmark enabled incremental GC candidate
+        if: steps.fork_rebase.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python ports/dos16/run_dos.py --dosbox "$DOSBOX_STAGING" \
+            --emulator staging --core-version 1.29.0 --timeout 180
+          python ports/dos16/run_bench.py --dosbox "$DOSBOX_STAGING" \
+            --emulator staging --mode incremental-candidate \
+            --heap 48000 --gc-tests --timeout 180
+          python ports/dos16/run_compile_lab.py --dosbox "$DOSBOX_STAGING" \
+            --emulator staging --mode incremental-candidate \
+            --runtime-stress --timeout 180
+          python tools/py86pkg/incremental_gc_lab.py snapshot --label candidate
 
       - name: Compile candidate only if all source hunks apply
         if: steps.compatible.outputs.candidate == 'true'
