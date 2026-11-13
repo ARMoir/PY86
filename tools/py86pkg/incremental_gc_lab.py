@@ -44,6 +44,16 @@ def prepare(source, fork):
     changed = run("git", "-C", fork, "diff", "--name-only",
                   "origin/master", "HEAD", "--", "py/")
     files = changed.stdout.splitlines()
+    # Save this disposable DOS-patched checkout as the merge side of a 3-way
+    # source rebase. The fork-side old blob identities are fetched below.
+    freeze = run("git", "-C", source, "add", "-A")
+    if freeze.returncode:
+        raise RuntimeError("Could not stage disposable DOS source: " + freeze.stdout)
+    commit = run("git", "-C", source, "-c", "user.name=Py86 GC Lab",
+                 "-c", "user.email=py86-gc-lab@invalid.example", "commit",
+                 "-q", "-m", "Temporary DOS16 GC source rebase baseline")
+    if commit.returncode:
+        raise RuntimeError("Could not snapshot DOS source: " + commit.stdout)
     test = run("git", "-C", source, "apply", "--check", patch)
     (OUT / "patch-check.log").write_text(test.stdout or ("PASS\n" if test.returncode == 0 else "UNKNOWN\n"))
     ready = test.returncode == 0
@@ -59,6 +69,39 @@ def prepare(source, fork):
             target = OUT / "rejects" / path.relative_to(source)
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(path, target)
+        # A context diff can reject hunks that git can still reconcile using
+        # exact fork-base blobs. The 3-way result is diagnostic ONLY: we do
+        # not enable the incremental collector or call it a candidate yet.
+        reset = run("git", "-C", source, "reset", "--hard", "HEAD")
+        if reset.returncode:
+            raise RuntimeError("Failed to reset disposable rebase tree")
+        fetch = run("git", "-C", source, "fetch", "--no-tags", "--depth", "1",
+                    fork, FORK_BASE)
+        (OUT / "threeway-fetch.log").write_text(fetch.stdout)
+        if fetch.returncode == 0:
+            merge = run("git", "-C", source, "apply", "--3way", patch)
+            (OUT / "threeway-merge.log").write_text(merge.stdout)
+            unresolved = run("git", "-C", source, "ls-files", "--unmerged")
+            names = sorted({line.split("\t", 1)[-1] for line
+                            in unresolved.stdout.splitlines()})
+            (OUT / "threeway-conflicts.json").write_text(json.dumps({
+                "automatic_merge": merge.returncode == 0,
+                "unmerged_paths": names,
+                "requires_port_hook_audit": True,
+                "incremental_enabled": False,
+            }, indent=2) + "\n")
+            for name in names:
+                src = source / name
+                if src.is_file():
+                    dst = OUT / "threeway-conflict-sources" / name
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(src, dst)
+        else:
+            (OUT / "threeway-conflicts.json").write_text(json.dumps({
+                "automatic_merge": False,
+                "unmerged_paths": [],
+                "blocked": "unable to fetch fork's base blobs",
+            }, indent=2) + "\n")
     report = {
         "baseline_core": CORE,
         "fork": "raspy135/micropython:gc-incremental",
@@ -67,6 +110,7 @@ def prepare(source, fork):
         "changed_core_files": files,
         "patch_sha256": hashlib.sha256(patch.read_bytes()).hexdigest(),
         "patch_applicable": ready,
+        "threeway_rebase_report": "threeway-conflicts.json" if not ready else None,
         "candidate": "ready for compilation and DOS tests" if ready
                      else "NOT PORTED: incompatible core hunks; no candidate timings",
         "warnings": [
