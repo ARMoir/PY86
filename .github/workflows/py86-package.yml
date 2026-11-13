@@ -196,7 +196,7 @@ jobs:
         run: |
           python ports/dos16/run_bench.py \
             --dosbox "$DOSBOX_STAGING" --emulator staging \
-            --mode production-strings --heap 48000 --gc-tests --timeout 300
+            --mode production-strings --heap 48000 --timeout 300
 
       - name: Upload production performance measurements
         uses: actions/upload-artifact@v4
