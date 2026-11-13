@@ -2,16 +2,13 @@ name: Py86 v1.29.0 DOS build and diagnostics
 
 on:
   workflow_dispatch:
-  push:
-    branches: [tandypy-dos16-port]
-    paths:
-      - .github/workflows/py86-upstream-129-build.yml
 
 permissions:
   contents: read
 
 jobs:
   build-129:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:

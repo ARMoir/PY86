@@ -2,10 +2,6 @@ name: Py86 8086 parser allocator A-B study
 
 # No release or automatic promotion. All candidates use .PY source.
 on:
-  push:
-    branches: [tandypy-dos16-port]
-    paths:
-      - '.github/workflows/py86-parser-lab.yml'
   workflow_dispatch:
 
 permissions:
@@ -13,6 +9,7 @@ permissions:
 
 jobs:
   parser-lab:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     steps:

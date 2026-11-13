@@ -2,16 +2,13 @@ name: Py86 1.24.1 vs 1.29.0 8086 hardware test package
 
 on:
   workflow_dispatch:
-  push:
-    branches: [tandypy-dos16-port]
-    paths:
-      - .github/workflows/py86-upstream-129-compare.yml
 
 permissions:
   contents: read
 
 jobs:
   compare-and-package:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 75
     steps:

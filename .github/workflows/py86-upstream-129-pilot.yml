@@ -2,16 +2,13 @@ name: Py86 MicroPython v1.29.0 compatibility pilot
 
 on:
   workflow_dispatch:
-  push:
-    branches: [tandypy-dos16-port]
-    paths:
-      - .github/workflows/py86-upstream-129-pilot.yml
 
 permissions:
   contents: read
 
 jobs:
   migration-audit:
+    if: github.ref == 'refs/heads/main'
     name: Audit 16-bit source compatibility before an upstream upgrade
     runs-on: ubuntu-24.04
     timeout-minutes: 20

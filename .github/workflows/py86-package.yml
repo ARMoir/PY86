@@ -329,5 +329,29 @@ jobs:
               exit 1
             fi
           done
+          # Git tags can outlive release pages if a previous workflow created
+          # a version tag but never successfully published a GitHub Release.
+          # Purge those orphaned Py86 v0.* version tags as well.
+          mapfile -t version_refs < <(
+            gh api --paginate "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/v0." --jq '.[].ref'
+          )
+          for ref in "${version_refs[@]}"; do
+            case "$ref" in
+              "refs/tags/$PY86_TAG") continue ;;
+              refs/tags/v0.*)
+                echo "Deleting obsolete/orphaned Py86 release tag $ref"
+                gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/$ref" >/dev/null
+                ;;
+              *) echo "Unexpected version ref $ref"; exit 1 ;;
+            esac
+          done
+          mapfile -t version_refs_after < <(
+            gh api --paginate "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/v0." --jq '.[].ref'
+          )
+          if [ "${#version_refs_after[@]}" -ne 1 ] ||
+             [ "${version_refs_after[0]}" != "refs/tags/$PY86_TAG" ]; then
+            echo "::error::Obsolete Py86 version tags remain: ${version_refs_after[*]}"
+            exit 1
+          fi
           echo "PASS: one GitHub release, one associated release tag, and no older release downloads"
           echo "Only release retained: $PY86_TAG" >> "$GITHUB_STEP_SUMMARY"

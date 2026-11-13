@@ -1,12 +1,12 @@
 name: P29OPT 1KA isolated GC root batching
 on:
-  push:
-    branches: [codex/p29opt-gc-roots]
   workflow_dispatch:
+
 permissions:
   contents: read
 jobs:
   gc129:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:

@@ -1,11 +1,6 @@
 name: Py86 medium and hybrid near-data memory experiment
 
 on:
-  push:
-    branches: [tandypy-dos16-port]
-    paths:
-      - '.github/workflows/py86-memory-model-lab.yml'
-      - 'ports/dos16/memory_model_lab.py'
   workflow_dispatch:
 
 permissions:
@@ -17,6 +12,7 @@ concurrency:
 
 jobs:
   study:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 70
     steps:
