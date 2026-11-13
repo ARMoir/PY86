@@ -17,12 +17,6 @@ NEW = """        mp_load_method_protected(obj, name, dest, true);
         #if defined(PY86_DOS_COMPLETE_BUILTINS)
         if (dest[0] == MP_OBJ_NULL && obj == MP_OBJ_FROM_PTR(&mp_module___main__)) {
             // Match Python's main-module -> builtins name resolution for Tab.
-            if (MP_STATE_VM(mp_module_builtins_override_dict) != NULL
-                && mp_map_lookup(
-                    &MP_STATE_VM(mp_module_builtins_override_dict)->map,
-                    MP_OBJ_NEW_QSTR(name), MP_MAP_LOOKUP) != NULL) {
-                return true;
-            }
             if (mp_map_lookup((mp_map_t *)&mp_module_builtins_globals.map,
                 MP_OBJ_NEW_QSTR(name), MP_MAP_LOOKUP) != NULL) {
                 return true;
