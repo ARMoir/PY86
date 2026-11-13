@@ -150,6 +150,14 @@ jobs:
           python tools/py86pkg/tandy_gc_kit.py verify \
             --dosbox "$DOSBOX_STAGING" --timeout 420
 
+      - name: Upload directly downloadable Tandy 1000 EX GC test kit
+        uses: actions/upload-artifact@v4
+        with:
+          name: PY86-TandyGC-48K
+          retention-days: 30
+          if-no-files-found: error
+          path: ports/dos16/build/incremental-gc/TANDYGC.zip
+
       - name: Check full upstream GC changes against patched DOS16 core
         id: compatible
         shell: bash
