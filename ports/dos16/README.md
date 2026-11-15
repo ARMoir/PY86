@@ -1,15 +1,22 @@
 # Py86: Python 3 for 16-bit DOS
 
-**Py86** is an experimental Python 3 interpreter for 16-bit MS-DOS, based on
-**MicroPython 1.29.0** for releases from `master`. It targets Intel 8086/8088-class CPUs and compatibles,
-including NEC V20 machines such as the Tandy 1000 EX.
-Production now includes **data-aware GC** together with the qualified 1KA parser and batched conservative GC roots. Historical 1.24.1 work is retained for reference.
+**Py86** is a feature-complete Python 3-compatible interpreter for 16-bit MS-DOS,
+based on **MicroPython 1.29.0** for releases from `master`. It targets
+Intel 8086/8088-class CPUs and compatibles, including NEC V20 machines
+such as the Tandy 1000 EX. The production build includes **data-aware GC**,
+the qualified 1KA parser, and batched conservative GC roots.
 
-**Status:** experimental 16-bit Open Watcom build. GitHub Actions now
-rebuilds and packages Py86 successfully. The original PythonClock has run on
-physical Tandy 1000 EX hardware, but the newly expanded modules have not yet
-been tested there. Older archived DOSBox tests reported `PASS`; these were
-not a fresh emulator test of the expanded module build.
+**Status (November 15, 2026): feature-complete; maintenance mode.**
+The current `master` release workflow runs DOSBox Staging integration tests,
+VM-fault diagnostics, and 24/32/48 KB GC safety/stress checks before publishing.
+PythonClock, Snake, and GC benchmarks have real-Tandy evidence; expanded module
+coverage and some heap configurations have not been comprehensively verified
+on physical 8086/V20 hardware.
+
+**Documentation note:** this technical document preserves historical
+experiments and older MicroPython 1.24.1 instructions for reference.
+Use the top-level [README](../../README.md) and the current `master`
+release workflow for authoritative installation/build guidance.
 
 ## Native DOS curses and Snake
 
@@ -171,7 +178,7 @@ performs automated host-side converter tests **and** an end-to-end test that
 downloads roman 5.2 from PyPI, converts it, builds the real 16-bit `PY86.EXE`,
 and executes Roman numeral round-trip and validation tests in **DOSBox
 Staging**. The successful reference run is
-[GitHub Actions run 43040390458](https://github.com/ARMoir/micropython/actions/runs/43040390458).
+[GitHub Actions run 43040390458](https://github.com/ARMoir/PY86/actions/runs/43040390458).
 DOSBox success is not a substitute for testing on the physical Tandy V20.
 
 Other packages may require manual changes or may be impossible to use with
@@ -257,7 +264,7 @@ newly compiled `PY86.EXE`. Rebuild with `build.py` to produce the renamed progra
 Its archived DOSBox batch run indicated `PASS` and all `CORE.PY` feature labels
 were present. That report is historical evidence, not a current CI result. The
 `run_dos.py` runner executes the bundled `.BAT` tests and checks required markers.
-A build/test workflow on native Windows or DOSBox is a useful future addition.
+The current `master` release workflow includes the newer DOSBox Staging integration suite; the archived result mentioned here is historical.
 
 The 2026-11-10 upload also contained an experimental `patch_source.py` one-off
 mutation helper. This directory deliberately uses **one version-specific Git
@@ -301,24 +308,25 @@ C:\>RUNCLK
 To run the original five-file PythonClock instead, use the unchanged files
 in `tests/pythonclock/` and invoke `PY86 Clock.py` after copying them to DOS.
 
-**Verification:** the current Py86 interpreter builds in GitHub Actions and
-PythonClock has been observed on real Tandy hardware. A new DOSBox integration
-run and real-hardware checks of the expanded standard library remain outstanding. Text-mode BIOS screen
-clearing may behave differently in graphics modes; the intended target is a
-standard DOS text console. The clock's drawing routines are unchanged.
+**Verification:** the current release pipeline builds and runs a native DOSBox
+Staging integration suite. PythonClock has been observed on real Tandy hardware,
+but complete real-hardware verification of every expanded standard-library
+module remains outstanding. Text-mode BIOS screen clearing may behave
+differently in graphics modes; the intended target is a standard DOS text
+console. The clock's drawing routines are unchanged.
 
 
-## GitHub Actions: ready-to-run PythonClock package
+## GitHub Actions: current 1.29.0 release package
 
-Every push to `tandypy-dos16-port` (and `master` after this port merges) runs
-[the Py86 package workflow](../../.github/workflows/py86-package.yml).
-It checks out the pinned MicroPython v1.24.1 core, downloads the pinned
-**2026-11-01 Open Watcom Linux x64 snapshot**, applies the DOS compatibility
-patch, rebuilds `PY86.EXE`, and packages the generated single-file clock
-and feature showcase.
+Each push to `master` (or manual dispatch) runs
+[the Py86 release workflow](../../.github/workflows/py86-package.yml).
+It checks out pinned MicroPython **1.29.0**, uses the pinned
+Open Watcom snapshot, applies the 16-bit DOS patches, builds `PY86.EXE`,
+and runs DOSBox Staging integration and GC safety checks before publication.
 
-In the **Actions** tab, open the latest **Py86 DOS + PythonClock package** run
-and download the **PY86** artifact. GitHub downloads it as **PY86.zip**.
+The workflow retains the **PY86** Actions artifact for convenience.
+For installation, download the versioned archive from
+[GitHub Releases](https://github.com/ARMoir/PY86/releases/latest).
 The ZIP has everything at its root (no extra directory or nested ZIP):
 
 - `PY86.EXE` (standard 16-bit DOS interpreter, preserved unchanged)
@@ -346,7 +354,7 @@ DOSBox Staging checks the actual 16-bit executable, but is not an exact
 Every successful run of the main
 [Py86 DOS + PythonClock package](../../.github/workflows/py86-package.yml)
 workflow (branch push or manual dispatch) creates a GitHub
-[Release](https://github.com/ARMoir/micropython/releases) with a
+[Release](https://github.com/ARMoir/PY86/releases) with a
 downloadable DOS-ready ZIP.
 
 Versions use **`0.YY.MM.N`**, for example `0.26.11.42`:
@@ -558,12 +566,12 @@ modules. The goal is usable Python 3 APIs without needing newer x86 hardware.
 - This is not the complete CPython standard library. The existing 48 KB
   Python heap and 16-bit real-mode memory restrictions still apply.
 
-The new `tests/LIBTEST.PY` exercises representative functionality from all
-four modules, including DOS directory/file operations, seeded random sequences,
-mathematical functions, and BIOS-tick sleeps. The DOSBox test runner includes
-it, but the automatic GitHub Actions workflow remains **build/package only**.
-A successful CI build is not a claim that these APIs have been exercised on
-the physical Tandy.
+The `tests/LIBTEST.PY` regression script exercises representative
+functionality, including DOS directory/file operations, seeded random
+sequences, mathematical functions, and BIOS-tick sleeps. The current
+GitHub Actions release workflow runs the DOSBox Staging integration suite
+before publication. Passing CI does **not** establish that every API has
+been exercised on a physical Tandy.
 
 
 ## Built-in `datetime` (no shim file)

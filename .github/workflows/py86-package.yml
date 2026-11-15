@@ -276,6 +276,10 @@ jobs:
           cat > "$RUNNER_TEMP/RELEASE_NOTES.md" <<EOF
           Automated Py86 16-bit DOS release **${PY86_VERSION}**.
 
+          **Project status: feature-complete (November 15, 2026); maintenance mode.**
+          The planned 16-bit DOS Python subset is complete. Future updates focus on
+          stability, compatibility, and build reproducibility rather than feature expansion.
+
           - Built from commit \`${GITHUB_SHA}\` on branch \`${GITHUB_REF_NAME}\`.
           - Source: MicroPython **1.29.0** (pinned SHA 0fd6c573ea815774668bbb16b8e197c8822368b2) with Py86 8086 DOS compatibility patches.
           - **1KA**: 1 KB parse-tree arena plus compiler-only Open Watcom flags.

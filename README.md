@@ -4,9 +4,17 @@
 
 This repository is maintained as a **standalone Py86 project**, not as an upstream MicroPython contribution. It is **not an official MicroPython distribution** and is not full desktop CPython. The interpreter is based on pinned **MicroPython 1.29.0**, with DOS-specific adaptations and Open Watcom 16-bit code generation.
 
+## Project status — feature-complete (November 15, 2026)
+
+**Py86 has met its original goal:** a useful Python 3-compatible interpreter running under real-mode 16-bit DOS on 8086/8088/NEC V20-class machines, demonstrated on a 7 MHz Tandy 1000 EX.
+
+**Maintenance mode:** the planned feature-development phase is complete. Future changes are intended for reproducible builds, regression fixes, documentation, and carefully scoped hardware-compatibility issues. There is no planned work toward full CPython compatibility, an `.mpy` loader, threading/`asyncio`, or a new GC architecture.
+
+**Validation scope:** the release pipeline runs DOSBox Staging integration tests, VM diagnostics, and GC stress checks; core operation, PythonClock, Snake, and GC performance have real-Tandy evidence. Not every bundled module or heap size has been independently validated on every physical system. This is a practical vintage-computing port, not a hardened runtime for untrusted bytecode.
+
 ## Get Py86
 
-**[Download the latest tested DOS release](https://github.com/ARMoir/micropython/releases/latest)**
+**[Download the latest tested DOS release](https://github.com/ARMoir/PY86/releases/latest)**
 
 Extract the versioned ZIP into a directory on a DOS disk or XT-IDE CompactFlash card. From the DOS prompt:
 
@@ -50,7 +58,7 @@ This repository deliberately removes upstream microcontroller/other-platform por
 
 ### Building
 
-Builds are currently driven by GitHub Actions. Select **[Py86 1.29.0 1KA data-aware GC master release](https://github.com/ARMoir/micropython/actions/workflows/py86-package.yml)** in the Actions tab, or push to `master` to run the gated release pipeline. The workflow checks out the pinned upstream MicroPython **v1.29.0** source separately, applies the Py86 16-bit compatibility patches, 1 KiB parser changes, GC root batching and data-aware GC patch, and compiles with the pinned Open Watcom toolchain.
+Builds are currently driven by GitHub Actions. Select **[Py86 1.29.0 1KA data-aware GC master release](https://github.com/ARMoir/PY86/actions/workflows/py86-package.yml)** in the Actions tab, or push to `master` to run the gated release pipeline. The workflow checks out the pinned upstream MicroPython **v1.29.0** source separately, applies the Py86 16-bit compatibility patches, 1 KiB parser changes, GC root batching and data-aware GC patch, and compiles with the pinned Open Watcom toolchain.
 
 The release and test pipeline uses an isolated upstream checkout; the local `py/` tree is retained for core code reference and future development. More detailed build parameters, tests, memory constraints and experimental context are in [`ports/dos16/README.md`](ports/dos16/README.md).
 
