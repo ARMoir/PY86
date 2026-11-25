@@ -60,6 +60,7 @@ def bytes_fix():
 
 cases = {'eval': eval_fix, 'array': array_fix, 'bytes': bytes_fix}
 if len(sys.argv) > 1:
+    print('BEGIN upstream_' + sys.argv[1])
     cases[sys.argv[1]]()
 else:
     for name in ('eval', 'array', 'bytes'):
