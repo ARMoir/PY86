@@ -9,6 +9,10 @@
     { MP_ROM_QSTR(MP_QSTR_quit), MP_ROM_PTR(&py86_builtin_exit_obj) }, \
     { MP_ROM_QSTR(MP_QSTR_open), MP_ROM_PTR(&py86_builtin_open_obj) },
 #define MICROPY_PY_JSON (1)
+/* Backport 8901bf220e: print unescaped JSON strings in contiguous runs. */
+#ifndef MICROPY_OPT_JSON_PRINTING
+#define MICROPY_OPT_JSON_PRINTING (1)
+#endif
 #define MICROPY_PY_ERRNO (1)
 #define MICROPY_PY_RE (1)
 #define MICROPY_PY_RE_MATCH_GROUPS (1)
