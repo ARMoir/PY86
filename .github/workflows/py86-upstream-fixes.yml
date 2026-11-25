@@ -135,7 +135,14 @@ jobs:
         run: |
           python ports/dos16/run_upstream_fixes.py --dosbox "$DOSBOX_STAGING" --expect-unfixed
 
-      - name: Apply only the three upstream correctness fixes
+      - name: Benchmark original JSON serializer at 48 KB
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          python ports/dos16/run_upstream_fixes.py --dosbox "$DOSBOX_STAGING" --json-only
+
+      - name: Apply upstream correctness and JSON serialization fixes
         run: |
           python ports/dos16/prepare_upstream_fixes_129.py --source "$RUNNER_TEMP/micropython-1.29.0"
 
@@ -174,7 +181,7 @@ jobs:
           print('PASS release version and DOSBox tests:', data['version'])
           PY
 
-      - name: Gate release on upstream correctness fixes at 24/48/60 KB
+      - name: Gate release on upstream correctness and JSON serialization at 24/48/60 KB
         env:
           SDL_VIDEODRIVER: dummy
           SDL_AUDIODRIVER: dummy
@@ -309,3 +316,5 @@ jobs:
             ports/dos16/build/upstream-unfixed/results.json
             ports/dos16/build/upstream-unfixed/H*/*.OUT
             ports/dos16/build/upstream-unfixed/H*/*.RES
+            ports/dos16/build/upstream-json-baseline/results.json
+            ports/dos16/build/upstream-json-baseline/H*/*.OUT

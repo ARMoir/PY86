@@ -147,7 +147,7 @@ jobs:
           print('PASS release version and DOSBox tests:', data['version'])
           PY
 
-      - name: Gate release on upstream correctness fixes at 24/48/60 KB
+      - name: Gate release on upstream correctness and JSON serialization at 24/48/60 KB
         env:
           SDL_VIDEODRIVER: dummy
           SDL_AUDIODRIVER: dummy
@@ -303,7 +303,7 @@ jobs:
 
           - Built from commit \`${GITHUB_SHA}\` on branch \`${GITHUB_REF_NAME}\`.
           - Source: MicroPython **1.29.0** (pinned SHA 0fd6c573ea815774668bbb16b8e197c8822368b2) with Py86 8086 DOS compatibility patches.
-          - Includes upstream fixes for eval trailing continuations, bytearray integer subclasses and bytes string subclasses; tested at 24/48/60 KB.
+          - Includes upstream fixes for eval trailing continuations, bytearray integer subclasses and bytes string subclasses, plus faster JSON string serialization; tested at 24/48/60 KB.
           - **1KA**: 1 KB parse-tree arena plus compiler-only Open Watcom flags.
           - **Data-aware GC (default)**: avoids scanning non-pointer bytearrays and raw string buffers using a bounded 512-byte bitmap, with safe fallback.
           - **GC root batching**: tested 2-byte overlapping pointer-window traversal, preserving conservative 16-bit far-pointer roots.

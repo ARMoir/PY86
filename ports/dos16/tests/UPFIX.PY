@@ -58,11 +58,41 @@ def bytes_fix():
     print('PASS upstream_bytes')
 
 
-cases = {'eval': eval_fix, 'array': array_fix, 'bytes': bytes_fix}
+def json_fix():
+    import json
+    import time
+    assert json.dumps('') == '""'
+    assert json.dumps('plain ASCII') == '"plain ASCII"'
+    assert json.dumps('a"b\\c\n\r\t') == '"a\\"b\\\\c\\n\\r\\t"'
+    for i in range(32):
+        value = chr(i)
+        encoded = json.dumps(value)
+        assert json.loads(encoded) == value
+        assert len(encoded) > 3
+    for value in ('\u03a9', 'abc\u03a9xyz', '\u03a9"\\\n\u03a9'):
+        assert json.loads(json.dumps(value)) == value
+    for value in ('x' * 1024, ('a"b\\c\n' * 100), ('x' * 511 + '"' + 'y' * 512)):
+        encoded = json.dumps(value)
+        gc.collect()
+        assert json.loads(encoded) == value
+    value = {'key': ['abc', 17, True, None, '\u03a9']}
+    assert json.loads(json.dumps(value)) == value
+    value = 'abcdefghijklmnopqrstuvwxyz012345' * 32
+    gc.collect()
+    start = time.ticks_ms()
+    for i in range(30):
+        encoded = json.dumps(value)
+    elapsed = time.ticks_diff(time.ticks_ms(), start)
+    assert encoded == '"' + value + '"'
+    print('JSON_MS', elapsed)
+    print('PASS upstream_json')
+
+
+cases = {'eval': eval_fix, 'array': array_fix, 'bytes': bytes_fix, 'json': json_fix}
 if len(sys.argv) > 1:
     print('BEGIN upstream_' + sys.argv[1])
     cases[sys.argv[1]]()
 else:
-    for name in ('eval', 'array', 'bytes'):
+    for name in ('eval', 'array', 'bytes', 'json'):
         cases[name]()
     print('PASS upstream_fixes_complete')

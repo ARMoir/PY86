@@ -8,6 +8,8 @@ This repository is maintained as a **standalone Py86 project**, not as an upstre
 
 **Py86 has met its original goal:** a useful Python 3-compatible interpreter running under real-mode 16-bit DOS on 8086/8088/NEC V20-class machines, demonstrated on a 7 MHz Tandy 1000 EX.
 
+The [upstream reconciliation notes](ports/dos16/UPSTREAM_SYNC.md) explain the distinction between merged upstream repository history and the pinned production runtime.
+
 **Maintenance mode:** the planned feature-development phase is complete. Future changes are intended for reproducible builds, regression fixes, documentation, and carefully scoped hardware-compatibility issues. There is no planned work toward full CPython compatibility, an `.mpy` loader, threading/`asyncio`, or a new GC architecture.
 
 **Validation scope:** the release pipeline runs DOSBox Staging integration tests, VM diagnostics, and GC stress checks; core operation, PythonClock, Snake, and GC performance have real-Tandy evidence. Not every bundled module or heap size has been independently validated on every physical system. This is a practical vintage-computing port, not a hardened runtime for untrusted bytecode.
