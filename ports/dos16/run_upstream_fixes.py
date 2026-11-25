@@ -1,0 +1,62 @@
+"""Native DOS tests for upstream fixes, including a negative-control mode."""
+import argparse
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+
+ROOT = Path(__file__).resolve().parent
+CASES = {'eval': 'upstream_eval', 'array': 'upstream_bytearray', 'bytes': 'upstream_bytes'}
+
+
+def main():
+    p = argparse.ArgumentParser()
+    p.add_argument('--dosbox', required=True)
+    p.add_argument('--expect-unfixed', action='store_true')
+    a = p.parse_args()
+    label = 'unfixed' if a.expect_unfixed else 'fixed'
+    out = ROOT / 'build' / ('upstream-' + label)
+    results = []
+    for heap in ((48000,) if a.expect_unfixed else (24000, 48000, 60000)):
+        stage = out / ('H' + str(heap))
+        stage.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / 'build/py86.exe', stage / 'PY86.EXE')
+        shutil.copy2(ROOT / 'tests/UPFIX.PY', stage / 'UPFIX.PY')
+        lines = ['@echo off', 'set PY86_PROFILE=', 'set PY86_HEAP=' + str(heap)]
+        for i, name in enumerate(CASES):
+            for suffix in ('.OUT', '.RES'):
+                (stage / (name.upper() + suffix)).unlink(missing_ok=True)
+            lines += ['py86 UPFIX.PY ' + name + ' > ' + name.upper() + '.OUT',
+                      'if errorlevel 1 goto fail' + str(i),
+                      'echo PASS > ' + name.upper() + '.RES', 'goto next' + str(i),
+                      ':fail' + str(i), 'echo FAIL > ' + name.upper() + '.RES', ':next' + str(i)]
+        (stage / 'CHECK.BAT').write_bytes(('\r\n'.join(lines) + '\r\n').encode('ascii'))
+        conf = stage / 'dosbox.conf'
+        conf.write_text('[sdl]\nfullscreen=false\n[dosbox]\nmemsize=1\n[cpu]\ncore=normal\ncpu_cycles=20000\n[autoexec]\nmount c "' + str(stage) + '"\nc:\ncall CHECK.BAT\nexit\n')
+        options = {}
+        if os.name == 'nt':
+            startup = subprocess.STARTUPINFO()
+            startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            options['startupinfo'] = startup
+        with (stage / 'emulator.log').open('w') as log:
+            subprocess.run([a.dosbox, '--conf', str(conf), '--noprimaryconf', '--nolocalconf'],
+                           stdout=log, stderr=log, timeout=180, check=True, **options)
+        for name, marker in CASES.items():
+            status = (stage / (name.upper() + '.RES')).read_text().strip()
+            output = (stage / (name.upper() + '.OUT')).read_text(errors='replace')
+            if a.expect_unfixed:
+                error = {'eval': 'AssertionError', 'array': 'MemoryError', 'bytes': 'TypeError'}[name]
+                passed = status == 'FAIL' and 'Traceback' in output and error in output and 'PASS ' + marker not in output
+            else:
+                passed = status == 'PASS' and 'PASS ' + marker in output and 'Traceback' not in output
+            results.append({'heap': heap, 'case': name, 'passed': passed, 'exit_status': status})
+    (out / 'results.json').write_text(json.dumps(results, indent=2))
+    print(json.dumps(results, indent=2))
+    if not all(r['passed'] for r in results):
+        raise SystemExit('Upstream ' + label + ' regression check failed')
+    print('PASS upstream ' + label + ': ' + str(len(results)) + ' native checks')
+
+
+if __name__ == '__main__':
+    main()

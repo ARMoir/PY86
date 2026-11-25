@@ -1,0 +1,311 @@
+name: Py86 upstream correctness backport validation
+
+on:
+  push:
+    branches: [codex/upstream-correctness-129]
+  workflow_dispatch:
+
+permissions:
+  contents: read  # Validation cannot publish or delete releases.
+
+concurrency:
+  group: py86-upstream-validation
+  cancel-in-progress: false
+
+jobs:
+  package:
+    if: github.ref == 'refs/heads/codex/upstream-correctness-129'
+    name: Validate upstream fixes on the production 1.29.0/1KA configuration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python on the build runner
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Stamp an increasing release version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="0.$(date -u +'%y.%m').$GITHUB_RUN_NUMBER"
+          echo "PY86_VERSION=$version" >> "$GITHUB_ENV"
+          echo "PY86_TAG=v$version" >> "$GITHUB_ENV"
+          echo "Building Py86 $version"
+
+      - name: Check Py86 build and test script syntax
+        shell: bash
+        run: |
+          python -m py_compile \
+            ports/dos16/build.py \
+            ports/dos16/prepare_upstream_fixes_129.py \
+            ports/dos16/run_upstream_fixes.py \
+            ports/dos16/prepare_source_129.py \
+            ports/dos16/rebase_core_129.py \
+            ports/dos16/parser_allocator_lab.py \
+            ports/dos16/prepare_release_gc129.py \
+            ports/dos16/prepare_data_gc129.py \
+            ports/dos16/run_data_gc_release.py \
+            ports/dos16/prepare_repl_autocomplete_129.py \
+            tools/py86pkg/gc129_lab.py \
+            ports/dos16/package.py \
+            ports/dos16/gen_clock.py \
+            ports/dos16/run_dos.py \
+            ports/dos16/run_vm_fault.py
+
+      - name: Get pinned MicroPython 1.29.0 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet --depth 1 --branch v1.29.0 \
+            https://github.com/micropython/micropython.git "$RUNNER_TEMP/micropython-1.29.0"
+          actual="$(git -C "$RUNNER_TEMP/micropython-1.29.0" rev-parse HEAD)"
+          test "$actual" = "0fd6c573ea815774668bbb16b8e197c8822368b2"
+
+      - name: Install pinned Open Watcom snapshot (Linux x64)
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-delay 5 \
+            'https://github.com/open-watcom/open-watcom-v2/releases/download/2026-11-01-Build/ow-snapshot.tar.xz' \
+            --output "$RUNNER_TEMP/ow-snapshot.tar.xz"
+          mkdir -p "$RUNNER_TEMP/watcom"
+          tar -xJf "$RUNNER_TEMP/ow-snapshot.tar.xz" -C "$RUNNER_TEMP/watcom"
+          test -x "$RUNNER_TEMP/watcom/binl64/wcc"
+          test -x "$RUNNER_TEMP/watcom/binl64/wlink"
+
+      - name: Apply 1.29.0 DOS patches, 1KB parser and validated data-aware GC
+        shell: bash
+        run: |
+          set -euo pipefail
+          python ports/dos16/prepare_source_129.py \
+            --source "$RUNNER_TEMP/micropython-1.29.0" \
+            --report-dir ports/dos16/build/release129
+          python ports/dos16/parser_allocator_lab.py patch-source "$RUNNER_TEMP/micropython-1.29.0"
+          python ports/dos16/prepare_release_gc129.py \
+            --source "$RUNNER_TEMP/micropython-1.29.0"
+          python ports/dos16/prepare_repl_autocomplete_129.py \
+            --source "$RUNNER_TEMP/micropython-1.29.0"
+          # Same exact scan-skip patch verified in DOSBox and on a real Tandy.
+          python ports/dos16/prepare_data_gc129.py \
+            --source "$RUNNER_TEMP/micropython-1.29.0"
+          test -s "$RUNNER_TEMP/micropython-1.29.0/py86-data-gc.json"
+
+      - name: Build qualified MicroPython 1.29.0 1KA + data-aware GC for 8086/V20
+        shell: bash
+        run: |
+          set -euo pipefail
+          python ports/dos16/build.py \
+            --source "$RUNNER_TEMP/micropython-1.29.0" \
+            --watcom "$RUNNER_TEMP/watcom" \
+            --core-version 1.29.0 \
+            --parser-alloc-mode block1024 \
+            --compile-opt all \
+            --data-layout far128 \
+            --runtime-profile \
+            --vm-fault-probe
+          test -s ports/dos16/build/py86.exe
+          grep -q PY86_GC129_APPLIED ports/dos16/build/release-gc-source.txt
+          grep -q '"collector": "production data-aware GC' "$RUNNER_TEMP/micropython-1.29.0/py86-data-gc.json"
+
+      # Use the same pinned portable DOSBox Staging binary that succeeded for
+      # py86pkg Roman tests; avoid intermittent Ubuntu apt mirror DNS failures.
+      - name: Download pinned DOSBox Staging for runtime tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-delay 4 \
+            'https://github.com/dosbox-staging/dosbox-staging/releases/download/v0.83.0/dosbox-staging-linux-x86_64-v0.83.0.tar.xz' \
+            --output "$RUNNER_TEMP/dosbox-staging.tar.xz"
+          echo 'd3a94f7f1c3e68a47ec88d61145506c7904452adb0c9c5928cb8cfe2331d6c5c  '"$RUNNER_TEMP/dosbox-staging.tar.xz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/dosbox-staging"
+          tar -xJf "$RUNNER_TEMP/dosbox-staging.tar.xz" -C "$RUNNER_TEMP/dosbox-staging"
+          exe="$(find "$RUNNER_TEMP/dosbox-staging" -type f -name dosbox -print -quit)"
+          test -n "$exe"
+          chmod +x "$exe"
+          echo "DOSBOX_STAGING=$exe" >> "$GITHUB_ENV"
+          "$exe" --version
+
+      - name: Prove all three regressions fail on the unpatched build
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          python ports/dos16/run_upstream_fixes.py --dosbox "$DOSBOX_STAGING" --expect-unfixed
+
+      - name: Apply only the three upstream correctness fixes
+        run: |
+          python ports/dos16/prepare_upstream_fixes_129.py --source "$RUNNER_TEMP/micropython-1.29.0"
+
+      - name: Rebuild fixed MicroPython 1.29.0 1KA + data-aware GC for 8086/V20
+        shell: bash
+        run: |
+          set -euo pipefail
+          python ports/dos16/build.py \
+            --source "$RUNNER_TEMP/micropython-1.29.0" \
+            --watcom "$RUNNER_TEMP/watcom" \
+            --core-version 1.29.0 \
+            --parser-alloc-mode block1024 \
+            --compile-opt all \
+            --data-layout far128 \
+            --runtime-profile \
+            --vm-fault-probe
+          test -s ports/dos16/build/py86.exe
+          grep -q PY86_GC129_APPLIED ports/dos16/build/release-gc-source.txt
+          grep -q '"collector": "production data-aware GC' "$RUNNER_TEMP/micropython-1.29.0/py86-data-gc.json"
+
+      - name: Run actual Py86 16-bit integration suite in DOSBox Staging
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          set -euo pipefail
+          python ports/dos16/run_dos.py \
+            --dosbox "$DOSBOX_STAGING" --emulator staging --core-version 1.29.0 --timeout 300
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          data = json.loads(Path('ports/dos16/build/test-results.json').read_text())
+          assert data['version'] == os.environ['PY86_VERSION'], data
+          assert data['batch_result'] == 'PASS', data
+          print('PASS release version and DOSBox tests:', data['version'])
+          PY
+
+      - name: Gate release on upstream correctness fixes at 24/48/60 KB
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          python ports/dos16/run_upstream_fixes.py --dosbox "$DOSBOX_STAGING"
+
+      - name: Retain upstream correctness test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PY86-upstream-correctness
+          if-no-files-found: warn
+          path: |
+            ports/dos16/build/upstream-fixed/results.json
+            ports/dos16/build/upstream-fixed/H*/*.OUT
+            ports/dos16/build/upstream-fixed/H*/*.RES
+
+      - name: Gate release on data-aware GC mutation and realloc safety at 24/32/48 KB
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          set -euo pipefail
+          python ports/dos16/run_data_gc_release.py \
+            --dosbox "$DOSBOX_STAGING" --timeout 360
+
+      - name: Upload release GC qualification evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: PY86-data-aware-GC-qualification
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            ports/dos16/build/release-data-gc-tests/result.json
+            ports/dos16/build/release-data-gc-tests/H*/*.OUT
+            ports/dos16/build/release-data-gc-tests/H*/HEAP.OUT
+            ports/dos16/build/release-data-gc-tests/H*/RESULT.TXT
+            ports/dos16/build/release-gc-source.txt
+
+      - name: Characterize corrupted VM bytecode in isolated DOSBox processes
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          python ports/dos16/run_vm_fault.py \
+            --dosbox "$DOSBOX_STAGING" --emulator staging --timeout 35
+
+      - name: Upload count benchmark and VM integrity diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: PY86-count-and-VM-integrity
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            ports/dos16/dos-test/COUNT16.OUT
+            ports/dos16/dos-test/ROBUST.OUT
+            ports/dos16/dos-test/BADSYNT.OUT
+            ports/dos16/build/vm-fault-results.json
+
+      - name: Measure 1.29.0 GC production performance (DOSBox Staging)
+        shell: bash
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: |
+          python ports/dos16/run_bench.py \
+            --dosbox "$DOSBOX_STAGING" --emulator staging \
+            --mode production-strings --heap 48000 --timeout 300
+
+      - name: Upload production performance measurements
+        uses: actions/upload-artifact@v4
+        with:
+          name: PY86-perf-production
+          path: ports/dos16/build/benchmark-production-strings.json
+          retention-days: 30
+
+      - name: Upload emulator test diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PY86-test-logs
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            ports/dos16/build/emulator.log
+            ports/dos16/build/test-results.json
+            ports/dos16/build/vm-fault-results.json
+            ports/dos16/build/fault-*.log
+            ports/dos16/fault-test/*/*.TXT
+            ports/dos16/build/bench-emulator.log
+            ports/dos16/bench-test/*.OUT
+            ports/dos16/dos-test/*.OUT
+            ports/dos16/dos-test/RESULT.TXT
+            ports/dos16/dos-test/DEMO.OUT
+            ports/dos16/dos-test/SHOW.OUT
+            ports/dos16/dos-test/ONECLK.OUT
+            ports/dos16/dos-test/PY86.LOG
+
+      - name: Package optimized 1.29.0 1KA data-aware GC release, PythonClock and feature demo
+        shell: bash
+        run: |
+          python ports/dos16/package.py
+
+      # Retain the old Actions artifact name for existing users.
+      # Releases publish the standalone ZIP produced by package.py.
+      - name: Publish PY86.zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: PY86
+          path: ports/dos16/dist/PY86/*
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 6
+
+      - name: Create a versioned, downloadable release ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp ports/dos16/dist/PY86.zip "ports/dos16/dist/PY86-${PY86_VERSION}.zip"
+          unzip -t "ports/dos16/dist/PY86-${PY86_VERSION}.zip"
+          test -f ports/dos16/dist/PY86/PY86.EXE
+
+      - name: Retain negative-control evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PY86-upstream-unfixed
+          if-no-files-found: warn
+          path: |
+            ports/dos16/build/upstream-unfixed/results.json
+            ports/dos16/build/upstream-unfixed/H*/*.OUT
+            ports/dos16/build/upstream-unfixed/H*/*.RES

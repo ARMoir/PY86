@@ -1,0 +1,53 @@
+diff --git a/py/grammar.h b/py/grammar.h
+--- a/py/grammar.h
++++ b/py/grammar.h
+@@ -48,7 +48,7 @@ DEF_RULE_NC(single_input, or(3), tok(NEWLINE), rule(simple_stmt), rule(compound_
+ DEF_RULE(file_input, c(generic_all_nodes), and_ident(1), opt_rule(file_input_2))
+ DEF_RULE(file_input_2, c(generic_all_nodes), one_or_more, rule(file_input_3))
+ DEF_RULE_NC(file_input_3, or(2), tok(NEWLINE), rule(stmt))
+-DEF_RULE_NC(eval_input, and_ident(2), rule(testlist), opt_rule(eval_input_2))
++DEF_RULE_NC(eval_input, and(2), rule(testlist), rule(eval_input_2))
+ DEF_RULE_NC(eval_input_2, and(1), tok(NEWLINE))
+ 
+ // decorator: '@' dotted_name [ '(' [arglist] ')' ] NEWLINE
+diff --git a/py/objarray.c b/py/objarray.c
+--- a/py/objarray.c
++++ b/py/objarray.c
+@@ -187,9 +187,11 @@ static mp_obj_t bytearray_make_new(const mp_obj_type_t *type_in, size_t n_args,
+     if (n_args == 0) {
+         // no args: construct an empty bytearray
+         return MP_OBJ_FROM_PTR(array_new(BYTEARRAY_TYPECODE, 0));
+-    } else if (mp_obj_is_int(args[0])) {
++    }
++    mp_obj_t len_in = mp_obj_cast_to_native_base(args[0], MP_OBJ_FROM_PTR(&mp_type_int));
++    if (len_in != MP_OBJ_NULL) {
+         // 1 arg, an integer: construct a blank bytearray of that length
+-        mp_uint_t len = mp_obj_get_int(args[0]);
++        mp_uint_t len = mp_obj_get_int(len_in);
+         mp_obj_array_t *o = array_new(BYTEARRAY_TYPECODE, len);
+         // If this config is set then the GC clears all memory, so we don't need to.
+         #if !MICROPY_GC_CONSERVATIVE_CLEAR
+diff --git a/py/objstr.c b/py/objstr.c
+--- a/py/objstr.c
++++ b/py/objstr.c
+@@ -358,7 +358,8 @@ static mp_obj_t bytes_make_new(const mp_obj_type_t *type_in, size_t n_args, size
+         return args[0];
+     }
+ 
+-    if (mp_obj_is_str(args[0])) {
++    mp_obj_t str_in = mp_obj_cast_to_native_base(args[0], MP_OBJ_FROM_PTR(&mp_type_str));
++    if (str_in != MP_OBJ_NULL) {
+         if (n_args < 2 || n_args > 3) {
+             #if MICROPY_ERROR_REPORTING <= MICROPY_ERROR_REPORTING_TERSE
+             goto wrong_args;
+@@ -367,8 +368,8 @@ static mp_obj_t bytes_make_new(const mp_obj_type_t *type_in, size_t n_args, size
+             #endif
+         }
+ 
+-        GET_STR_DATA_LEN(args[0], str_data, str_len);
+-        GET_STR_HASH(args[0], str_hash);
++        GET_STR_DATA_LEN(str_in, str_data, str_len);
++        GET_STR_HASH(str_in, str_hash);
+         if (str_hash == 0) {
+             str_hash = qstr_compute_hash(str_data, str_len);
+         }
