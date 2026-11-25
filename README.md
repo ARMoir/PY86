@@ -8,7 +8,7 @@ This repository is maintained as a **standalone Py86 project**, not as an upstre
 
 **Py86 has met its original goal:** a useful Python 3-compatible interpreter running under real-mode 16-bit DOS on 8086/8088/NEC V20-class machines, demonstrated on a 7 MHz Tandy 1000 EX.
 
-The [upstream reconciliation notes](ports/dos16/UPSTREAM_SYNC.md) explain the distinction between merged upstream repository history and the pinned production runtime.
+**Upstream maintenance (November 24, 2026):** [PR #3](https://github.com/ARMoir/PY86/pull/3) synchronized the repository with 58 upstream MicroPython commits and brought the fork to zero commits behind upstream at the time of the merge. The production runtime remains pinned to MicroPython 1.29.0, with three targeted correctness backports and the faster JSON string serializer. See the [upstream reconciliation notes](ports/dos16/UPSTREAM_SYNC.md) for details.
 
 **Maintenance mode:** the planned feature-development phase is complete. Future changes are intended for reproducible builds, regression fixes, documentation, and carefully scoped hardware-compatibility issues. There is no planned work toward full CPython compatibility, an `.mpy` loader, threading/`asyncio`, or a new GC architecture.
 
@@ -38,7 +38,16 @@ Py86's Python compatibility is a practical **subset**: many Python 3 constructs 
 - **CPU and environment:** 8086/8088/NEC V20, 16-bit real-mode DOS, Open Watcom C16 large memory model. The primary physical test machine is a 7 MHz NEC V20 Tandy 1000 EX with XT-IDE/CF.
 - **Python engine:** pinned MicroPython 1.29.0 with a 1 KiB parser arena and targeted compiler optimizations; DOS-native terminal, file, time, and text-mode `curses` support; interactive Tab completion; bundled `math`, `random`, `os`, `time`, `datetime`, `json`, `re`, `hashlib`, and `gc` features (availability and coverage vary).
 - **Default garbage collector:** the tested **data-aware conservative GC** skips scanning known pointer-free raw strings and bytearrays using a bounded 512-byte side bitmap. It retains the 2-bit allocation table, overlapping 16-bit far-pointer root scanning, and safe fallbacks. This is **not incremental GC**.
-- **Packaging:** the `master` branch runs DOSBox integration checks, VM-corruption checks, and 24/32/48 KiB GC mutation/reallocation stress tests before publishing a versioned release. After a verified release, the workflow retains only the latest release and tag.
+- **Upstream backports:** optimized JSON string serialization using contiguous runs of unescaped bytes; corrected malformed `eval()` input and `bytearray()` / `bytes()` construction from integer / string subclasses. Geometric string-buffer growth remains disabled in the production runtime.
+- **Packaging:** the `master` branch runs DOSBox integration checks, VM-corruption checks, and 24/32/48 KB GC mutation/reallocation stress tests and upstream correctness/JSON checks at 24/48/60 KB before publishing a versioned release. After a verified release, the workflow retains only the latest release and tag.
+
+### JSON serialization performance (DOSBox Staging)
+
+| Workload | Original | Optimized | Speedup |
+|---|---:|---:|---:|
+| 30 JSON serializations of a 1,024-character ASCII string, 48,000-byte heap | 549 ms | 55 ms | ~10× |
+
+The [validation run](https://github.com/ARMoir/PY86/actions/runs/45535284125) passed all three negative controls, 12 native correctness checks, integration tests, VM diagnostics and data-aware GC stress checks. The JSON timing uses the coarse DOS BIOS clock in DOSBox Staging and is specific to this workload; it has not yet been measured on the physical Tandy.
 
 ### Real-hardware evidence
 
@@ -49,7 +58,7 @@ On the Tandy 1000 EX, the data-aware GC reduced a raw-buffer GC benchmark from *
 | Location | Purpose |
 |---|---|
 | [`ports/dos16/`](ports/dos16/) | The Py86 host, DOS runtime, build scripts, tests, packaging and detailed [technical README](ports/dos16/README.md) |
-| [`py/`](py/) | MicroPython interpreter, compiler and GC core |
+| [`py/`](py/) | Synchronized upstream MicroPython core reference; production uses a separate pinned checkout |
 | [`extmod/`](extmod/) and [`shared/`](shared/) | MicroPython reusable modules and core support code |
 | [`lib/`](lib/) | Retained third-party dependencies and upstream source support |
 | [`tests/`](tests/) and [`tools/`](tools/) | Core compatibility tests, developer tooling and the [Py86 package converter](tools/py86pkg/README.md) |
@@ -60,7 +69,7 @@ This repository deliberately removes upstream microcontroller/other-platform por
 
 ### Building
 
-Builds are currently driven by GitHub Actions. Select **[Py86 1.29.0 1KA data-aware GC master release](https://github.com/ARMoir/PY86/actions/workflows/py86-package.yml)** in the Actions tab, or push to `master` to run the gated release pipeline. The workflow checks out the pinned upstream MicroPython **v1.29.0** source separately, applies the Py86 16-bit compatibility patches, 1 KiB parser changes, GC root batching and data-aware GC patch, and compiles with the pinned Open Watcom toolchain.
+Builds are currently driven by GitHub Actions. Select **[Py86 1.29.0 1KA data-aware GC master release](https://github.com/ARMoir/PY86/actions/workflows/py86-package.yml)** in the Actions tab, or push to `master` to run the gated release pipeline. The workflow checks out the pinned upstream MicroPython **v1.29.0** source separately, applies the Py86 16-bit compatibility patches, 1 KiB parser changes, GC root batching, data-aware GC patch and selected upstream correctness/JSON backports, and compiles with the pinned Open Watcom toolchain.
 
 The release and test pipeline uses an isolated upstream checkout; the local `py/` tree is retained for core code reference and future development. More detailed build parameters, tests, memory constraints and experimental context are in [`ports/dos16/README.md`](ports/dos16/README.md).
 
